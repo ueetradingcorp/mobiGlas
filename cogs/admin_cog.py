@@ -43,25 +43,10 @@ class AdminCog(commands.Cog):
         await interaction.response.defer()
         
         try:
-            # Prüfe ob URL oder lokaler Pfad
-            if daten_quelle.startswith("http"):
-                # URL: Prüfe ob erreichbar
-                logger.info(f"Prüfe URL: {daten_quelle}")
-                response = requests.head(daten_quelle, timeout=10)
-                if response.status_code != 200:
-                    await interaction.followup.send(
-                        f"❌ URL nicht erreichbar: {daten_quelle}"
-                    )
-                    return
-            else:
-                # Lokaler Pfad: Prüfe ob existiert
-                if not os.path.exists(daten_quelle):
-                    await interaction.followup.send(
-                        f"❌ Pfad nicht gefunden: {daten_quelle}"
-                    )
-                    return
-            
             logger.info(f"Starte Daten-Import von: {daten_quelle}")
+            await interaction.followup.send(
+                "⏳ Importiere Daten... Das kann 15-30 Minuten dauern. Bitte warten..."
+            )
             
             # Starte Import
             importer = StarCitizenDataImporter(daten_quelle)
