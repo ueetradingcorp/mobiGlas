@@ -2,14 +2,14 @@
 Import von Star Citizen Spieldaten in die Datenbank
 Importiert Blueprints, Items, Missionen aus scunpacked-data
 """
-
+ 
 import json
 import logging
 from pathlib import Path
 from database.db_connection import get_db
-
+ 
 logger = logging.getLogger(__name__)
-
+ 
 class StarCitizenDataImporter:
     """Importiert Star Citizen Daten aus JSON-Dateien"""
     
@@ -151,29 +151,39 @@ class StarCitizenDataImporter:
         return imported
     
     def import_missions(self):
-        """Importiere Missionen aus contracts.json"""
+        """Importiere Missionen aus contracts/ Ordner"""
         logger.info("Importiere Missionen...")
         
-        contracts_file = self.data_path / "contracts.json"
+        contracts_dir = self.data_path / "contracts"
         
-        if not contracts_file.exists():
-            logger.error(f"❌ Datei nicht gefunden: {contracts_file}")
-            return 0
-        
-        try:
-            with open(contracts_file, "r", encoding="utf-8") as f:
-                missions = json.load(f)
-        except json.JSONDecodeError as e:
-            logger.error(f"❌ JSON-Fehler in contracts.json: {e}")
+        if not contracts_dir.exists():
+            logger.error(f"❌ Ordner nicht gefunden: {contracts_dir}")
             return 0
         
         imported = 0
+        processed = 0
         
-        for mission_id, mission_data in missions.items():
+        # Iteriere über alle JSON-Dateien im contracts Ordner
+        for contract_file in contracts_dir.glob("*.json"):
+            processed += 1
+            
+            # Zeige Fortschritt alle 100 Dateien
+            if processed % 100 == 0:
+                logger.info(f"   Verarbeite Datei {processed}...")
+            
+            try:
+                with open(contract_file, "r", encoding="utf-8") as f:
+                    mission_data = json.load(f)
+            except json.JSONDecodeError:
+                continue
+            except Exception as e:
+                logger.debug(f"Fehler beim Lesen von {contract_file.name}: {e}")
+                continue
+            
             if not isinstance(mission_data, dict):
                 continue
             
-            name = mission_data.get("name", f"Unknown_{mission_id}")
+            name = mission_data.get("name", contract_file.stem)
             faction = mission_data.get("faction", "Unknown")
             mission_type = mission_data.get("type", "Unknown")
             reward = mission_data.get("reward", 0)
@@ -193,5 +203,5 @@ class StarCitizenDataImporter:
                 logger.debug(f"Fehler bei Mission {name}: {e}")
                 continue
         
-        logger.info(f"✓ {imported} Missionen importiert!")
+        logger.info(f"✓ {imported} Missionen importiert! (aus {processed} Dateien)")
         return imported
