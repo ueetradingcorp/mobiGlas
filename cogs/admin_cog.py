@@ -8,6 +8,7 @@ from discord.ext import commands
 from discord import app_commands
 import logging
 import os
+import requests
 from database.db_connection import get_db
 from database.import_data import StarCitizenDataImporter
 
@@ -26,9 +27,9 @@ class AdminCog(commands.Cog):
     
     @app_commands.command(name="import-daten", description="Importiere Star Citizen Daten (ADMIN ONLY)")
     @app_commands.describe(
-        daten_pfad="Pfad zu den scunpacked-data Dateien (z.B. /app/scunpacked-data)"
+        daten_quelle="URL zu GitHub Repo oder lokaler Pfad (z.B. https://raw.githubusercontent.com/StarCitizenWiki/scunpacked-data/master)"
     )
-    async def import_daten(self, interaction: discord.Interaction, daten_pfad: str):
+    async def import_daten(self, interaction: discord.Interaction, daten_quelle: str):
         """Importiere Star Citizen Daten in die Datenbank"""
         
         # Nur Admins
@@ -42,17 +43,28 @@ class AdminCog(commands.Cog):
         await interaction.response.defer()
         
         try:
-            # Prüfe ob Pfad existiert
-            if not os.path.exists(daten_pfad):
-                await interaction.followup.send(
-                    f"❌ Pfad nicht gefunden: {daten_pfad}"
-                )
-                return
+            # Prüfe ob URL oder lokaler Pfad
+            if daten_quelle.startswith("http"):
+                # URL: Prüfe ob erreichbar
+                logger.info(f"Prüfe URL: {daten_quelle}")
+                response = requests.head(daten_quelle, timeout=10)
+                if response.status_code != 200:
+                    await interaction.followup.send(
+                        f"❌ URL nicht erreichbar: {daten_quelle}"
+                    )
+                    return
+            else:
+                # Lokaler Pfad: Prüfe ob existiert
+                if not os.path.exists(daten_quelle):
+                    await interaction.followup.send(
+                        f"❌ Pfad nicht gefunden: {daten_quelle}"
+                    )
+                    return
             
-            logger.info(f"Starte Daten-Import von: {daten_pfad}")
+            logger.info(f"Starte Daten-Import von: {daten_quelle}")
             
             # Starte Import
-            importer = StarCitizenDataImporter(daten_pfad)
+            importer = StarCitizenDataImporter(daten_quelle)
             importer.import_all()
             
             await interaction.followup.send(
