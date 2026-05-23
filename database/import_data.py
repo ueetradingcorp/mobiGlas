@@ -205,3 +205,4 @@ class StarCitizenDataImporter:
         
         logger.info(f"✓ {imported} Missionen importiert! (aus {processed} Dateien)")
         return imported
+ 
