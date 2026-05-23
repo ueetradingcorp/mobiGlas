@@ -1,58 +1,32 @@
 """
 Import von Star Citizen Spieldaten in die Datenbank
-Importiert Blueprints, Items, Missionen direkt von GitHub (scunpacked-data)
+Importiert Blueprints, Items, Missionen aus scunpacked-data
 """
 
 import json
 import logging
-import requests
 from pathlib import Path
 from database.db_connection import get_db
 
 logger = logging.getLogger(__name__)
 
 class StarCitizenDataImporter:
-    """Importiert Star Citizen Daten von GitHub oder lokal"""
+    """Importiert Star Citizen Daten aus JSON-Dateien"""
     
-    def __init__(self, data_source):
+    def __init__(self, data_path):
         """
         Initialisiere den Importer
         
         Args:
-            data_source: Entweder URL zu GitHub Repo oder lokaler Pfad
+            data_path: Pfad zu den scunpacked-data Dateien
         """
-        self.data_source = data_source.rstrip('/')  # Entferne trailing slash
+        self.data_path = Path(data_path)
         self.db = get_db()
-        self.is_url = data_source.startswith("http")
-        
-        if not self.is_url:
-            self.data_path = Path(data_source)
-    
-    def download_json(self, url):
-        """Lade JSON von URL"""
-        try:
-            response = requests.get(url, timeout=30)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            logger.error(f"Fehler beim Download von {url}: {e}")
-            return None
-    
-    def read_local_json(self, filename):
-        """Lese JSON lokal"""
-        file_path = self.data_path / filename
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"Fehler beim Lesen von {filename}: {e}")
-            return None
     
     def import_all(self):
         """Importiere alle Daten"""
         logger.info("=" * 50)
         logger.info("Starte Star Citizen Daten-Import...")
-        logger.info(f"Quelle: {self.data_source}")
         logger.info("=" * 50)
         
         bp_count = self.import_blueprints()
@@ -70,16 +44,17 @@ class StarCitizenDataImporter:
         """Importiere Blueprint-Daten"""
         logger.info("Importiere Blueprints...")
         
-        # Lade Daten
-        if self.is_url:
-            url = f"{self.data_source}/blueprints.json"
-            logger.info(f"Lade von: {url}")
-            blueprints = self.download_json(url)
-        else:
-            blueprints = self.read_local_json("blueprints.json")
+        blueprints_file = self.data_path / "blueprints.json"
         
-        if not blueprints:
-            logger.error("❌ Blueprints konnten nicht geladen werden")
+        if not blueprints_file.exists():
+            logger.error(f"❌ Datei nicht gefunden: {blueprints_file}")
+            return 0
+        
+        try:
+            with open(blueprints_file, "r", encoding="utf-8") as f:
+                blueprints = json.load(f)
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON-Fehler in blueprints.json: {e}")
             return 0
         
         imported = 0
@@ -136,16 +111,17 @@ class StarCitizenDataImporter:
         """Importiere Item/Zutaten-Daten"""
         logger.info("Importiere Items...")
         
-        # Lade Daten
-        if self.is_url:
-            url = f"{self.data_source}/items.json"
-            logger.info(f"Lade von: {url}")
-            items = self.download_json(url)
-        else:
-            items = self.read_local_json("items.json")
+        items_file = self.data_path / "items.json"
         
-        if not items:
-            logger.error("❌ Items konnten nicht geladen werden")
+        if not items_file.exists():
+            logger.error(f"❌ Datei nicht gefunden: {items_file}")
+            return 0
+        
+        try:
+            with open(items_file, "r", encoding="utf-8") as f:
+                items = json.load(f)
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON-Fehler in items.json: {e}")
             return 0
         
         imported = 0
@@ -175,77 +151,9 @@ class StarCitizenDataImporter:
         return imported
     
     def import_missions(self):
-        """Importiere Missionen"""
+        """Importiere Missionen aus contracts/ Ordner"""
         logger.info("Importiere Missionen...")
         
-        if self.is_url:
-            # Von GitHub: Liste alle contracts/*.json Dateien
-            return self.import_missions_from_github()
-        else:
-            # Lokal: Lese aus contracts/ Ordner
-            return self.import_missions_from_local()
-    
-    def import_missions_from_github(self):
-        """Importiere Missionen von GitHub (API)"""
-        imported = 0
-        processed = 0
-        
-        # GitHub API für Dateiliste
-        api_url = "https://api.github.com/repos/StarCitizenWiki/scunpacked-data/contents/contracts"
-        
-        logger.info(f"Hole Dateiliste von: {api_url}")
-        
-        try:
-            response = requests.get(api_url, timeout=30)
-            response.raise_for_status()
-            files = response.json()
-        except Exception as e:
-            logger.error(f"Fehler beim Abrufen der Dateiliste: {e}")
-            return 0
-        
-        logger.info(f"Gefunden: {len(files)} Mission-Dateien")
-        
-        for file_info in files:
-            if not file_info["name"].endswith(".json"):
-                continue
-            
-            processed += 1
-            
-            if processed % 100 == 0:
-                logger.info(f"   Verarbeite Datei {processed}...")
-            
-            # Download JSON
-            download_url = file_info["download_url"]
-            mission_data = self.download_json(download_url)
-            
-            if not mission_data or not isinstance(mission_data, dict):
-                continue
-            
-            name = mission_data.get("name", file_info["name"])
-            faction = mission_data.get("faction", "Unknown")
-            mission_type = mission_data.get("type", "Unknown")
-            reward = mission_data.get("reward", 0)
-            xp = mission_data.get("xp", 0)
-            
-            try:
-                query = """
-                    INSERT INTO missions 
-                    (name, faction, mission_type, reward_auc, reward_xp)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON CONFLICT (name) DO UPDATE 
-                    SET faction = EXCLUDED.faction
-                """
-                self.db.execute_update(query, (name, faction, mission_type, reward, xp))
-                imported += 1
-            except Exception as e:
-                logger.debug(f"Fehler bei Mission {name}: {e}")
-                continue
-        
-        logger.info(f"✓ {imported} Missionen importiert! (aus {processed} Dateien)")
-        return imported
-    
-    def import_missions_from_local(self):
-        """Importiere Missionen lokal"""
         contracts_dir = self.data_path / "contracts"
         
         if not contracts_dir.exists():
@@ -255,15 +163,19 @@ class StarCitizenDataImporter:
         imported = 0
         processed = 0
         
+        # Iteriere über alle JSON-Dateien im contracts Ordner
         for contract_file in contracts_dir.glob("*.json"):
             processed += 1
             
+            # Zeige Fortschritt alle 100 Dateien
             if processed % 100 == 0:
                 logger.info(f"   Verarbeite Datei {processed}...")
             
             try:
                 with open(contract_file, "r", encoding="utf-8") as f:
                     mission_data = json.load(f)
+            except json.JSONDecodeError:
+                continue
             except Exception as e:
                 logger.debug(f"Fehler beim Lesen von {contract_file.name}: {e}")
                 continue
