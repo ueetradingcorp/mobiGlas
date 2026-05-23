@@ -20,9 +20,9 @@ class AdminCog(commands.Cog):
         self.bot = bot
         self.db = get_db()
     
-    def is_bot_owner(self, interaction: discord.Interaction) -> bool:
-        """Prüfe ob User der Bot-Owner ist"""
-        return interaction.user.id == interaction.guild.owner_id
+    def is_admin(self, interaction: discord.Interaction) -> bool:
+        """Prüfe ob User Admin-Rechte hat"""
+        return interaction.user.guild_permissions.administrator
     
     @app_commands.command(name="import-daten", description="Importiere Star Citizen Daten (ADMIN ONLY)")
     @app_commands.describe(
@@ -31,10 +31,10 @@ class AdminCog(commands.Cog):
     async def import_daten(self, interaction: discord.Interaction, daten_pfad: str):
         """Importiere Star Citizen Daten in die Datenbank"""
         
-        # Nur Bot-Owner
-        if not self.is_bot_owner(interaction):
+        # Nur Admins
+        if not self.is_admin(interaction):
             await interaction.response.send_message(
-                "❌ Nur der Server-Owner kann diesen Befehl nutzen.",
+                "❌ Nur Admins können diesen Befehl nutzen.",
                 ephemeral=True
             )
             return
@@ -69,10 +69,10 @@ class AdminCog(commands.Cog):
     async def db_status(self, interaction: discord.Interaction):
         """Zeige den Status der Datenbank"""
         
-        # Nur Bot-Owner
-        if not self.is_bot_owner(interaction):
+        # Nur Admins
+        if not self.is_admin(interaction):
             await interaction.response.send_message(
-                "❌ Nur der Server-Owner kann diesen Befehl nutzen.",
+                "❌ Nur Admins können diesen Befehl nutzen.",
                 ephemeral=True
             )
             return
