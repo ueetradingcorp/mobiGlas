@@ -33,19 +33,17 @@ class RufCog(commands.Cog):
         """Autocomplete für Fraktions-Namen"""
         
         if not current:
-            # Keine Eingabe - zeige Top 25 Fraktionen
             query = """
-                SELECT DISTINCT faction FROM missions 
-                WHERE faction != 'Unknown' 
-                ORDER BY faction LIMIT 25
+                SELECT DISTINCT reputation_faction FROM missions 
+                WHERE reputation_faction != 'Unknown' 
+                ORDER BY reputation_faction LIMIT 25
             """
             results = self.db.execute_query(query)
         else:
-            # Suche Fraktionen die mit dem aktuellen Text starten oder ihn enthalten
             query = """
-                SELECT DISTINCT faction FROM missions 
-                WHERE faction ILIKE %s AND faction != 'Unknown'
-                ORDER BY faction 
+                SELECT DISTINCT reputation_faction FROM missions 
+                WHERE reputation_faction ILIKE %s AND reputation_faction != 'Unknown'
+                ORDER BY reputation_faction 
                 LIMIT 25
             """
             results = self.db.execute_query(query, (f"%{current}%",))
@@ -53,7 +51,6 @@ class RufCog(commands.Cog):
         if not results:
             return []
         
-        # Erstelle Choice-Liste für Discord
         choices = [
             app_commands.Choice(name=result[0], value=result[0])
             for result in results
@@ -67,7 +64,6 @@ class RufCog(commands.Cog):
     async def ruf(self, interaction: discord.Interaction, fraktion: str):
         """Zeige Missionen und Ruf-Anforderungen für eine Fraktion"""
         
-        # Rollen-Check
         if not self.has_user_role(interaction):
             await interaction.response.send_message(
                 "❌ Du hast keine Berechtigung, diesen Befehl zu nutzen.",
@@ -78,12 +74,11 @@ class RufCog(commands.Cog):
         await interaction.response.defer()
         
         try:
-            # Suche Missionen der Fraktion
             query = """
-                SELECT name, mission_type, reward_xp, reward_auc, reputation_rank
+                SELECT name, mission_type, reward_xp, reward_auc, reputation_amount
                 FROM missions
-                WHERE faction = %s
-                ORDER BY reward_xp DESC
+                WHERE reputation_faction = %s
+                ORDER BY reputation_amount DESC, reward_xp DESC
                 LIMIT 20
             """
             results = self.db.execute_query(query, (fraktion,))
@@ -94,43 +89,46 @@ class RufCog(commands.Cog):
                 )
                 return
             
-            # Erstelle Embed
             embed = discord.Embed(
-                title=f"👑 Ruf-Missionen: {fraktion}",
+                title=f"👑 {fraktion}",
                 color=discord.Color.gold()
             )
             
-            # Sammle Statistiken
+            # Berechne benötigte Reputation
             total_missions = len(results)
+            total_rep = sum(result[4] if result[4] else 0 for result in results)
             total_xp = sum(result[2] if result[2] else 0 for result in results)
             total_auc = sum(result[3] if result[3] else 0 for result in results)
             
-            # Füge Statistiken hinzu
+            # Statistiken
             embed.add_field(
-                name="📊 Statistiken",
-                value=f"**Anzahl Missionen:** {total_missions}\n"
+                name="📊 Benötigte Reputation & Rewards",
+                value=f"**Benötigte Rep-Punkte:** ~{total_rep:,}\n"
                       f"**Gesamt XP:** ~{total_xp:,}\n"
-                      f"**Gesamt aUEC:** ~{total_auc:,}",
+                      f"**Gesamt aUEC:** ~{total_auc:,}\n"
+                      f"**Anzahl Missionen:** {total_missions}",
                 inline=False
             )
             
-            # Füge erste 10 Missionen hinzu
+            # Missionen aufzählen
             missions_text = ""
-            for i, (name, mission_type, reward_xp, reward_auc, rank) in enumerate(results[:10], 1):
+            for i, (name, mission_type, reward_xp, reward_auc, rep_amount) in enumerate(results[:15], 1):
                 xp_str = f"{reward_xp} XP" if reward_xp else "? XP"
                 auc_str = f"{reward_auc:,} aUEC" if reward_auc else "? aUEC"
+                rep_str = f"{rep_amount} Rep" if rep_amount else "? Rep"
+                
                 missions_text += f"**{i}. {name}**\n"
-                missions_text += f"   💰 {auc_str} | ⭐ {xp_str}\n"
+                missions_text += f"   💰 {auc_str} | ⭐ {xp_str} | 👑 {rep_str}\n"
             
             if missions_text:
                 embed.add_field(
-                    name="📋 Top 10 Missionen",
+                    name="📋 Missionen",
                     value=missions_text,
                     inline=False
                 )
             
-            if total_missions > 10:
-                embed.set_footer(text=f"mobiGlas Star Citizen Bot | Zeigt 10 von {total_missions} Missionen")
+            if total_missions > 15:
+                embed.set_footer(text=f"mobiGlas Star Citizen Bot | Zeigt 15 von {total_missions} Missionen")
             else:
                 embed.set_footer(text="mobiGlas Star Citizen Bot")
             
