@@ -33,11 +33,9 @@ class RezeptCog(commands.Cog):
         """Autocomplete für Blueprint-Namen"""
         
         if not current:
-            # Keine Eingabe - zeige Top 25 Blueprints
             query = "SELECT name FROM blueprints ORDER BY name LIMIT 25"
             results = self.db.execute_query(query)
         else:
-            # Suche Blueprints die mit dem aktuellen Text starten oder ihn enthalten
             query = """
                 SELECT name FROM blueprints 
                 WHERE name ILIKE %s 
@@ -49,7 +47,6 @@ class RezeptCog(commands.Cog):
         if not results:
             return []
         
-        # Erstelle Choice-Liste für Discord
         choices = [
             app_commands.Choice(name=result[0], value=result[0])
             for result in results
@@ -63,7 +60,6 @@ class RezeptCog(commands.Cog):
     async def rezept(self, interaction: discord.Interaction, blueprint: str):
         """Zeige Rezept-Informationen für einen Blueprint"""
         
-        # Rollen-Check
         if not self.has_user_role(interaction):
             await interaction.response.send_message(
                 "❌ Du hast keine Berechtigung, diesen Befehl zu nutzen.",
@@ -74,7 +70,6 @@ class RezeptCog(commands.Cog):
         await interaction.response.defer()
         
         try:
-            # Suche Blueprint
             query = """
                 SELECT id, name, crafting_time_minutes, source
                 FROM blueprints
@@ -100,18 +95,20 @@ class RezeptCog(commands.Cog):
             """
             ingredients = self.db.execute_query(ingredients_query, (bp_id,))
             
+            # Hole User die diesen Blueprint haben
+            user_query = """
+                SELECT user_id FROM user_blueprints
+                WHERE blueprint_id = %s
+            """
+            user_result = self.db.execute_query(user_query, (bp_id,))
+            
             # Erstelle Embed
             embed = discord.Embed(
-                title=f"🔧 Blueprint: {bp_name}",
+                title=f"🔧 {bp_name}",
                 color=discord.Color.blue()
             )
             
-            embed.add_field(
-                name="⏱️ Crafting-Zeit",
-                value=f"{craft_time} Minuten",
-                inline=False
-            )
-            
+            # Benötigte Zutaten
             if ingredients:
                 ingredients_text = "\n".join(
                     [f"• {ing[0]} (x{ing[1]})" for ing in ingredients]
@@ -128,10 +125,32 @@ class RezeptCog(commands.Cog):
                     inline=False
                 )
             
-            if source:
+            # Crafting-Zeit
+            embed.add_field(
+                name="⏱️ Crafting-Zeit",
+                value=f"{craft_time} Minuten",
+                inline=False
+            )
+            
+            # Mission (Fraktion) - TODO: Könnte aus unlocking_missions kommen
+            embed.add_field(
+                name="📍 Mission (Fraktion)",
+                value="Informationen noch nicht verfügbar",
+                inline=False
+            )
+            
+            # Rezeptinhaber
+            if user_result:
+                owner_ids = [str(row[0]) for row in user_result]
                 embed.add_field(
-                    name="📍 Quelle",
-                    value=source,
+                    name="👤 Rezeptinhaber",
+                    value=f"<@{owner_ids[0]}>" if owner_ids else "Unbekannt",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="👤 Rezeptinhaber",
+                    value="Noch niemand",
                     inline=False
                 )
             
@@ -161,7 +180,6 @@ class RezeptCog(commands.Cog):
         await interaction.response.defer()
         
         try:
-            # Suche Blueprint
             query = "SELECT id FROM blueprints WHERE name = %s LIMIT 1"
             result = self.db.execute_query(query, (blueprint,))
             
@@ -173,7 +191,6 @@ class RezeptCog(commands.Cog):
             
             bp_id = result[0][0]
             
-            # Prüfe ob bereits vorhanden
             check_query = """
                 SELECT id FROM user_blueprints
                 WHERE user_id = %s AND blueprint_id = %s
@@ -186,7 +203,6 @@ class RezeptCog(commands.Cog):
                 )
                 return
             
-            # Füge Blueprint zum Inventar hinzu
             insert_query = """
                 INSERT INTO user_blueprints (user_id, blueprint_id)
                 VALUES (%s, %s)
@@ -224,7 +240,6 @@ class RezeptCog(commands.Cog):
         await interaction.response.defer()
         
         try:
-            # Suche Blueprint
             query = "SELECT id FROM blueprints WHERE name = %s LIMIT 1"
             result = self.db.execute_query(query, (blueprint,))
             
@@ -236,7 +251,6 @@ class RezeptCog(commands.Cog):
             
             bp_id = result[0][0]
             
-            # Prüfe ob User diesen Blueprint hat
             check_query = """
                 SELECT id FROM user_blueprints
                 WHERE user_id = %s AND blueprint_id = %s
@@ -249,7 +263,6 @@ class RezeptCog(commands.Cog):
                 )
                 return
             
-            # Lösche Blueprint aus Inventar
             delete_query = """
                 DELETE FROM user_blueprints
                 WHERE user_id = %s AND blueprint_id = %s
