@@ -27,8 +27,43 @@ class RufCog(commands.Cog):
         user_role_ids = [role.id for role in interaction.user.roles]
         return any(role_id in USER_ROLES for role_id in user_role_ids)
     
+    async def fraktion_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Autocomplete für Fraktions-Namen"""
+        
+        if not current:
+            # Keine Eingabe - zeige Top 25 Fraktionen
+            query = """
+                SELECT DISTINCT faction FROM missions 
+                WHERE faction != 'Unknown' 
+                ORDER BY faction LIMIT 25
+            """
+            results = self.db.execute_query(query)
+        else:
+            # Suche Fraktionen die mit dem aktuellen Text starten oder ihn enthalten
+            query = """
+                SELECT DISTINCT faction FROM missions 
+                WHERE faction ILIKE %s AND faction != 'Unknown'
+                ORDER BY faction 
+                LIMIT 25
+            """
+            results = self.db.execute_query(query, (f"%{current}%",))
+        
+        if not results:
+            return []
+        
+        # Erstelle Choice-Liste für Discord
+        choices = [
+            app_commands.Choice(name=result[0], value=result[0])
+            for result in results
+        ]
+        
+        return choices
+    
     @app_commands.command(name="ruf", description="Zeige Ruf-Anforderungen für eine Fraktion")
-    @app_commands.describe(fraktion="Name der Fraktion (z.B. ADAGIO HOLDINGS)")
+    @app_commands.describe(fraktion="Name der Fraktion")
+    @app_commands.autocomplete(fraktion=fraktion_autocomplete)
     async def ruf(self, interaction: discord.Interaction, fraktion: str):
         """Zeige Missionen und Ruf-Anforderungen für eine Fraktion"""
         
@@ -47,11 +82,11 @@ class RufCog(commands.Cog):
             query = """
                 SELECT name, mission_type, reward_xp, reward_auc, reputation_rank
                 FROM missions
-                WHERE faction ILIKE %s
+                WHERE faction = %s
                 ORDER BY reward_xp DESC
                 LIMIT 20
             """
-            results = self.db.execute_query(query, (f"%{fraktion}%",))
+            results = self.db.execute_query(query, (fraktion,))
             
             if not results:
                 await interaction.followup.send(
