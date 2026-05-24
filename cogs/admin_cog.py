@@ -4,11 +4,10 @@ Handles: Admin-Commands wie Daten-Import
 """
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import logging
-import os
-import requests
+import asyncio
 from database.db_connection import get_db
 from database.import_data import StarCitizenDataImporter
 
@@ -20,6 +19,7 @@ class AdminCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = get_db()
+        self.import_in_progress = False
     
     def is_admin(self, interaction: discord.Interaction) -> bool:
         """Prüfe ob User Admin-Rechte hat"""
@@ -27,7 +27,7 @@ class AdminCog(commands.Cog):
     
     @app_commands.command(name="import-daten", description="Importiere Star Citizen Daten (ADMIN ONLY)")
     @app_commands.describe(
-        daten_quelle="URL zu GitHub Repo oder lokaler Pfad (z.B. https://raw.githubusercontent.com/StarCitizenWiki/scunpacked-data/master)"
+        daten_quelle="URL zu Star Citizen Wiki API (z.B. https://api.star-citizen.wiki)"
     )
     async def import_daten(self, interaction: discord.Interaction, daten_quelle: str):
         """Importiere Star Citizen Daten in die Datenbank"""
@@ -40,24 +40,72 @@ class AdminCog(commands.Cog):
             )
             return
         
+        # Prüfe ob Import bereits läuft
+        if self.import_in_progress:
+            await interaction.response.send_message(
+                "⚠️ Ein Import läuft bereits. Bitte warten...",
+                ephemeral=True
+            )
+            return
+        
         await interaction.response.defer()
         
         try:
             logger.info(f"Starte Daten-Import von: {daten_quelle}")
             await interaction.followup.send(
-                "⏳ Importiere Daten... Das kann 15-30 Minuten dauern. Bitte warten..."
+                "⏳ Importiere Daten im Hintergrund...\n"
+                "Das kann mehrere Minuten dauern.\n"
+                "Du wirst benachrichtigt wenn fertig!"
             )
             
-            # Starte Import
-            importer = StarCitizenDataImporter(daten_quelle)
-            importer.import_all()
-            
-            await interaction.followup.send(
-                "✅ Daten-Import erfolgreich abgeschlossen!"
-            )
+            # Starte Import im Hintergrund
+            self.import_in_progress = True
+            await self.run_import_async(daten_quelle, interaction)
             
         except Exception as e:
             logger.error(f"Fehler beim Daten-Import: {e}")
+            self.import_in_progress = False
+            await interaction.followup.send(
+                f"❌ Fehler beim Import: {str(e)}"
+            )
+    
+    async def run_import_async(self, daten_quelle: str, interaction: discord.Interaction):
+        """Führe Import asynchron aus"""
+        try:
+            # Starte Import in Thread-Pool (blockiert Bot nicht)
+            loop = asyncio.get_event_loop()
+            importer = StarCitizenDataImporter(daten_quelle)
+            
+            # Führe import_all in Thread aus
+            await loop.run_in_executor(None, importer.import_all)
+            
+            self.import_in_progress = False
+            
+            # Hole Statistiken
+            bp_result = self.db.execute_query("SELECT COUNT(*) FROM blueprints")
+            bp_count = bp_result[0][0] if bp_result else 0
+            
+            items_result = self.db.execute_query("SELECT COUNT(*) FROM crafting_materials")
+            items_count = items_result[0][0] if items_result else 0
+            
+            missions_result = self.db.execute_query("SELECT COUNT(*) FROM missions")
+            missions_count = missions_result[0][0] if missions_result else 0
+            
+            # Sende Ergebnis
+            embed = discord.Embed(
+                title="✅ Import abgeschlossen!",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="📦 Blueprints", value=f"{bp_count:,}", inline=True)
+            embed.add_field(name="🔨 Items", value=f"{items_count:,}", inline=True)
+            embed.add_field(name="👑 Missionen", value=f"{missions_count:,}", inline=True)
+            
+            await interaction.followup.send(embed=embed)
+            logger.info(f"✅ Import erfolgreich abgeschlossen!")
+            
+        except Exception as e:
+            self.import_in_progress = False
+            logger.error(f"Fehler beim async Import: {e}")
             await interaction.followup.send(
                 f"❌ Fehler beim Import: {str(e)}"
             )
@@ -119,6 +167,13 @@ class AdminCog(commands.Cog):
                 value=f"{user_bp_count:,}",
                 inline=True
             )
+            
+            if self.import_in_progress:
+                embed.add_field(
+                    name="⏳ Status",
+                    value="Import läuft noch...",
+                    inline=False
+                )
             
             embed.set_footer(text="mobiGlas Star Citizen Bot")
             
