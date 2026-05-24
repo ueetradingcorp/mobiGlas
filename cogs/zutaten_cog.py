@@ -8,7 +8,7 @@ from discord.ext import commands
 from discord import app_commands
 import logging
 from database.db_connection import get_db
-from config import ALLOWED_ROLES
+from config import USER_ROLES
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +19,13 @@ class ZutatenCog(commands.Cog):
         self.bot = bot
         self.db = get_db()
     
-    def has_allowed_role(self, interaction: discord.Interaction) -> bool:
+    def has_user_role(self, interaction: discord.Interaction) -> bool:
         """Prüfe ob User die notwendigen Rollen hat"""
         if not interaction.user.roles:
             return False
         
-        user_roles = [role.name for role in interaction.user.roles]
-        return any(role in ALLOWED_ROLES for role in user_roles)
+        user_role_ids = [role.id for role in interaction.user.roles]
+        return any(role_id in USER_ROLES for role_id in user_role_ids)
     
     @app_commands.command(name="zutaten", description="Zeige Fundort einer Zutat")
     @app_commands.describe(zutat="Name der Zutat (z.B. IRON, EISEN)")
@@ -33,7 +33,7 @@ class ZutatenCog(commands.Cog):
         """Zeige wo eine Zutat zu finden ist"""
         
         # Rollen-Check
-        if not self.has_allowed_role(interaction):
+        if not self.has_user_role(interaction):
             await interaction.response.send_message(
                 "❌ Du hast keine Berechtigung, diesen Befehl zu nutzen.",
                 ephemeral=True
