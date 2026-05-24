@@ -80,7 +80,7 @@ class StarCitizenDataImporter:
             else:
                 break
             
-            if not blueprints or not isinstance(blueprints, list):
+            if not blueprints or not isinstance(blueprints, list) or len(blueprints) == 0:
                 break
             
             page_imported = 0
@@ -139,10 +139,6 @@ class StarCitizenDataImporter:
             imported += page_imported
             logger.info(f"   Seite {page}: {page_imported} Blueprints")
             
-            # Wenn weniger als erwartet, sind wir am Ende
-            if len(blueprints) < 50:
-                break
-            
             page += 1
         
         logger.info(f"✓ {imported} Blueprints importiert!")
@@ -169,7 +165,7 @@ class StarCitizenDataImporter:
             else:
                 break
             
-            if not items or not isinstance(items, list):
+            if not items or not isinstance(items, list) or len(items) == 0:
                 break
             
             page_imported = 0
@@ -210,9 +206,6 @@ class StarCitizenDataImporter:
             imported += page_imported
             logger.info(f"   Seite {page}: {page_imported} Items")
             
-            if len(items) < 50:
-                break
-            
             page += 1
         
         logger.info(f"✓ {imported} Items importiert!")
@@ -239,7 +232,7 @@ class StarCitizenDataImporter:
             else:
                 break
             
-            if not missions or not isinstance(missions, list):
+            if not missions or not isinstance(missions, list) or len(missions) == 0:
                 break
             
             page_imported = 0
@@ -318,9 +311,6 @@ class StarCitizenDataImporter:
             
             imported += page_imported
             logger.info(f"   Seite {page}: {page_imported} Missionen")
-            
-            if len(missions) < 50:
-                break
             
             page += 1
         
