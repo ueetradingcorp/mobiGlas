@@ -33,11 +33,9 @@ class ZutatenCog(commands.Cog):
         """Autocomplete für Zutat-Namen"""
         
         if not current:
-            # Keine Eingabe - zeige Top 25 Zutaten
             query = "SELECT name FROM crafting_materials ORDER BY name LIMIT 25"
             results = self.db.execute_query(query)
         else:
-            # Suche Zutaten die mit dem aktuellen Text starten oder ihn enthalten
             query = """
                 SELECT name FROM crafting_materials 
                 WHERE name ILIKE %s 
@@ -49,7 +47,6 @@ class ZutatenCog(commands.Cog):
         if not results:
             return []
         
-        # Erstelle Choice-Liste für Discord
         choices = [
             app_commands.Choice(name=result[0], value=result[0])
             for result in results
@@ -63,7 +60,6 @@ class ZutatenCog(commands.Cog):
     async def zutaten(self, interaction: discord.Interaction, zutat: str):
         """Zeige wo eine Zutat zu finden ist"""
         
-        # Rollen-Check
         if not self.has_user_role(interaction):
             await interaction.response.send_message(
                 "❌ Du hast keine Berechtigung, diesen Befehl zu nutzen.",
@@ -74,7 +70,6 @@ class ZutatenCog(commands.Cog):
         await interaction.response.defer()
         
         try:
-            # Suche Zutat
             query = """
                 SELECT name, location, mining_type
                 FROM crafting_materials
@@ -101,9 +96,8 @@ class ZutatenCog(commands.Cog):
             
             type_display = type_icons.get(mining_type, f"❓ {mining_type}")
             
-            # Erstelle Embed
             embed = discord.Embed(
-                title=f"📦 Zutat: {name}",
+                title=f"📦 {name}",
                 color=discord.Color.green()
             )
             
