@@ -37,11 +37,25 @@ if not DATABASE_URL:
     )
 
 # ============================================
-# BOT SETTINGS
+# DISCORD ROLLEN
 # ============================================
 
-# Welche Discord Rollen dürfen den Bot nutzen?
-ALLOWED_ROLES = ["Freund", "Interessent", "Mitglied"]
+# Rollen für normale Bot-Commands (/rezept, /zutaten, /ruf)
+USER_ROLES = [
+    966290443090407464,   # Freund
+    915601784343498793,   # Interessent
+    915572343600992296,   # Mitglied
+]
+
+# Rollen für Admin-Commands (/import-daten, /db-status, /ping)
+ADMIN_ROLES = [
+    920642041959038976,   # Direktoren
+    1481345670223888475,  # Bot-Admins
+]
+
+# ============================================
+# BOT SETTINGS
+# ============================================
 
 # Bot Status
 BOT_STATUS = "Star Citizen Crafting | /rezept"
