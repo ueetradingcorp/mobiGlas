@@ -67,7 +67,7 @@ class StarCitizenDataImporter:
             logger.error("❌ Blueprints konnten nicht geladen werden")
             return 0
         
-        # Daten können in verschiedenen Formaten kommen
+        # Extrahiere Blueprints aus der API-Antwort
         if isinstance(data, dict) and "data" in data:
             blueprints = data["data"]
         elif isinstance(data, list):
@@ -75,26 +75,25 @@ class StarCitizenDataImporter:
         else:
             blueprints = data
         
-        if not isinstance(blueprints, (list, dict)):
-            logger.error("❌ Unerwartetes Blueprint-Format")
+        if not isinstance(blueprints, list):
+            logger.error("❌ Unerwartetes Blueprint-Format (keine Liste)")
             return 0
         
         imported = 0
         
-        # Iteriere über Blueprints
-        items_iter = blueprints.items() if isinstance(blueprints, dict) else enumerate(blueprints)
-        
-        for idx, bp_data in items_iter:
+        for bp_data in blueprints:
             if not isinstance(bp_data, dict):
                 continue
             
-            name = bp_data.get("name", f"Unknown_{idx}")
-            craft_time = bp_data.get("craftTime", bp_data.get("craft_time", 0))
-            if isinstance(craft_time, str):
-                try:
-                    craft_time = int(craft_time)
-                except:
-                    craft_time = 0
+            # Nutze output_name statt name
+            name = bp_data.get("output_name", bp_data.get("name", "Unknown"))
+            
+            # Konvertiere craft_time_seconds zu Minuten
+            craft_time_seconds = bp_data.get("craft_time_seconds", 0)
+            craft_time_minutes = int(craft_time_seconds / 60) if craft_time_seconds else 0
+            
+            # Nutze key als source (eindeutige ID)
+            source = bp_data.get("key", "")
             
             try:
                 # Insertiere Blueprint
@@ -104,7 +103,7 @@ class StarCitizenDataImporter:
                     ON CONFLICT (name) DO UPDATE 
                     SET crafting_time_minutes = EXCLUDED.crafting_time_minutes
                 """
-                self.db.execute_update(query, (name, craft_time, str(idx)))
+                self.db.execute_update(query, (name, craft_time_minutes, source))
                 
                 # Hole die Blueprint-ID
                 select_query = "SELECT id FROM blueprints WHERE name = %s"
@@ -119,10 +118,12 @@ class StarCitizenDataImporter:
                         for ingredient in ingredients:
                             if isinstance(ingredient, dict):
                                 ing_name = ingredient.get("name", "Unknown")
-                                ing_qty = ingredient.get("quantity", ingredient.get("count", 1))
+                                
+                                # Quantity kann quantity oder quantity_scu sein
+                                ing_qty = ingredient.get("quantity", ingredient.get("quantity_scu", 1))
                                 
                                 try:
-                                    ing_qty = int(ing_qty)
+                                    ing_qty = int(ing_qty) if ing_qty else 1
                                 except:
                                     ing_qty = 1
                                 
@@ -152,7 +153,7 @@ class StarCitizenDataImporter:
             logger.error("❌ Items konnten nicht geladen werden")
             return 0
         
-        # Daten können in verschiedenen Formaten kommen
+        # Extrahiere Items aus der API-Antwort
         if isinstance(data, dict) and "data" in data:
             items = data["data"]
         elif isinstance(data, list):
@@ -160,20 +161,17 @@ class StarCitizenDataImporter:
         else:
             items = data
         
-        if not isinstance(items, (list, dict)):
-            logger.error("❌ Unerwartetes Items-Format")
+        if not isinstance(items, list):
+            logger.error("❌ Unerwartetes Items-Format (keine Liste)")
             return 0
         
         imported = 0
         
-        # Iteriere über Items
-        items_iter = items.items() if isinstance(items, dict) else enumerate(items)
-        
-        for idx, item_data in items_iter:
+        for item_data in items:
             if not isinstance(item_data, dict):
                 continue
             
-            name = item_data.get("name", f"Unknown_{idx}")
+            name = item_data.get("name", "Unknown")
             location = item_data.get("location", item_data.get("found_at", "Unknown"))
             
             # Mining-Type bestimmen
@@ -212,7 +210,7 @@ class StarCitizenDataImporter:
             logger.error("❌ Missionen konnten nicht geladen werden")
             return 0
         
-        # Daten können in verschiedenen Formaten kommen
+        # Extrahiere Missionen aus der API-Antwort
         if isinstance(data, dict) and "data" in data:
             missions = data["data"]
         elif isinstance(data, list):
@@ -220,17 +218,14 @@ class StarCitizenDataImporter:
         else:
             missions = data
         
-        if not isinstance(missions, (list, dict)):
-            logger.error("❌ Unerwartetes Missions-Format")
+        if not isinstance(missions, list):
+            logger.error("❌ Unerwartetes Missions-Format (keine Liste)")
             return 0
         
         imported = 0
         processed = 0
         
-        # Iteriere über Missionen
-        missions_iter = missions.items() if isinstance(missions, dict) else enumerate(missions)
-        
-        for idx, mission_data in missions_iter:
+        for mission_data in missions:
             processed += 1
             
             if processed % 100 == 0:
@@ -239,7 +234,7 @@ class StarCitizenDataImporter:
             if not isinstance(mission_data, dict):
                 continue
             
-            name = mission_data.get("name", mission_data.get("title", f"Unknown_{idx}"))
+            name = mission_data.get("name", mission_data.get("title", "Unknown"))
             faction = mission_data.get("faction", mission_data.get("giver", "Unknown"))
             mission_type = mission_data.get("type", mission_data.get("mission_type", "Unknown"))
             
