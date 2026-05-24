@@ -139,4 +139,136 @@ class StarCitizenDataImporter:
                 logger.debug(f"Fehler bei Blueprint {name}: {e}")
                 continue
         
-        logger.info(f"
+        logger.info(f"✓ {imported} Blueprints importiert!")
+        return imported
+    
+    def import_items(self):
+        """Importiere Item/Zutaten-Daten"""
+        logger.info("Importiere Items...")
+        
+        data = self.fetch_json(self.items_url)
+        
+        if not data:
+            logger.error("❌ Items konnten nicht geladen werden")
+            return 0
+        
+        # Daten können in verschiedenen Formaten kommen
+        if isinstance(data, dict) and "data" in data:
+            items = data["data"]
+        elif isinstance(data, list):
+            items = data
+        else:
+            items = data
+        
+        if not isinstance(items, (list, dict)):
+            logger.error("❌ Unerwartetes Items-Format")
+            return 0
+        
+        imported = 0
+        
+        # Iteriere über Items
+        items_iter = items.items() if isinstance(items, dict) else enumerate(items)
+        
+        for idx, item_data in items_iter:
+            if not isinstance(item_data, dict):
+                continue
+            
+            name = item_data.get("name", f"Unknown_{idx}")
+            location = item_data.get("location", item_data.get("found_at", "Unknown"))
+            
+            # Mining-Type bestimmen
+            item_type = "OTHER"
+            type_str = item_data.get("type", "").lower()
+            if "hand" in type_str or "hand_mineable" in type_str:
+                item_type = "HAND_MINEABLE"
+            elif "ship" in type_str or "ship_mineable" in type_str:
+                item_type = "SHIP_MINEABLE"
+            elif "mission" in type_str or "quest" in type_str:
+                item_type = "NPC_MISSION"
+            
+            try:
+                query = """
+                    INSERT INTO crafting_materials (name, location, mining_type)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (name) DO UPDATE 
+                    SET location = EXCLUDED.location
+                """
+                self.db.execute_update(query, (name, location, item_type))
+                imported += 1
+            except Exception as e:
+                logger.debug(f"Fehler bei Item {name}: {e}")
+                continue
+        
+        logger.info(f"✓ {imported} Items importiert!")
+        return imported
+    
+    def import_missions(self):
+        """Importiere Missionen"""
+        logger.info("Importiere Missionen...")
+        
+        data = self.fetch_json(self.missions_url)
+        
+        if not data:
+            logger.error("❌ Missionen konnten nicht geladen werden")
+            return 0
+        
+        # Daten können in verschiedenen Formaten kommen
+        if isinstance(data, dict) and "data" in data:
+            missions = data["data"]
+        elif isinstance(data, list):
+            missions = data
+        else:
+            missions = data
+        
+        if not isinstance(missions, (list, dict)):
+            logger.error("❌ Unerwartetes Missions-Format")
+            return 0
+        
+        imported = 0
+        processed = 0
+        
+        # Iteriere über Missionen
+        missions_iter = missions.items() if isinstance(missions, dict) else enumerate(missions)
+        
+        for idx, mission_data in missions_iter:
+            processed += 1
+            
+            if processed % 100 == 0:
+                logger.info(f"   Verarbeite Mission {processed}...")
+            
+            if not isinstance(mission_data, dict):
+                continue
+            
+            name = mission_data.get("name", mission_data.get("title", f"Unknown_{idx}"))
+            faction = mission_data.get("faction", mission_data.get("giver", "Unknown"))
+            mission_type = mission_data.get("type", mission_data.get("mission_type", "Unknown"))
+            
+            # Rewards verarbeiten
+            reward = mission_data.get("reward", mission_data.get("reward_auc", 0))
+            try:
+                reward = int(reward) if reward else 0
+            except:
+                reward = 0
+            
+            xp = mission_data.get("xp", mission_data.get("reward_xp", 0))
+            try:
+                xp = int(xp) if xp else 0
+            except:
+                xp = 0
+            
+            try:
+                query = """
+                    INSERT INTO missions 
+                    (name, faction, mission_type, reward_auc, reward_xp)
+                    VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (name) DO UPDATE 
+                    SET faction = EXCLUDED.faction
+                """
+                self.db.execute_update(query, (name, faction, mission_type, reward, xp))
+                imported += 1
+            except Exception as e:
+                logger.debug(f"Fehler bei Mission {name}: {e}")
+                continue
+        
+        logger.info(f"✓ {imported} Missionen importiert!")
+        return imported
