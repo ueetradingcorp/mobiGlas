@@ -27,8 +27,39 @@ class ZutatenCog(commands.Cog):
         user_role_ids = [role.id for role in interaction.user.roles]
         return any(role_id in USER_ROLES for role_id in user_role_ids)
     
+    async def zutat_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Autocomplete für Zutat-Namen"""
+        
+        if not current:
+            # Keine Eingabe - zeige Top 25 Zutaten
+            query = "SELECT name FROM crafting_materials ORDER BY name LIMIT 25"
+            results = self.db.execute_query(query)
+        else:
+            # Suche Zutaten die mit dem aktuellen Text starten oder ihn enthalten
+            query = """
+                SELECT name FROM crafting_materials 
+                WHERE name ILIKE %s 
+                ORDER BY name 
+                LIMIT 25
+            """
+            results = self.db.execute_query(query, (f"%{current}%",))
+        
+        if not results:
+            return []
+        
+        # Erstelle Choice-Liste für Discord
+        choices = [
+            app_commands.Choice(name=result[0], value=result[0])
+            for result in results
+        ]
+        
+        return choices
+    
     @app_commands.command(name="zutaten", description="Zeige Fundort einer Zutat")
-    @app_commands.describe(zutat="Name der Zutat (z.B. IRON, EISEN)")
+    @app_commands.describe(zutat="Name der Zutat")
+    @app_commands.autocomplete(zutat=zutat_autocomplete)
     async def zutaten(self, interaction: discord.Interaction, zutat: str):
         """Zeige wo eine Zutat zu finden ist"""
         
@@ -47,10 +78,10 @@ class ZutatenCog(commands.Cog):
             query = """
                 SELECT name, location, mining_type
                 FROM crafting_materials
-                WHERE name ILIKE %s
+                WHERE name = %s
                 LIMIT 1
             """
-            result = self.db.execute_query(query, (f"%{zutat}%",))
+            result = self.db.execute_query(query, (zutat,))
             
             if not result:
                 await interaction.followup.send(
