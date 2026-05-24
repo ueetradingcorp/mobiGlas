@@ -24,9 +24,9 @@ class StarCitizenDataImporter:
         self.db = get_db()
         
         # API Endpoints
-        self.items_url = f"{self.api_base_url}/items"
-        self.blueprints_url = f"{self.api_base_url}/blueprints"
-        self.missions_url = f"{self.api_base_url}/missions"
+        self.items_url = f"{self.api_base_url}/api/items"
+        self.blueprints_url = f"{self.api_base_url}/api/blueprints"
+        self.missions_url = f"{self.api_base_url}/api/missions"
     
     def fetch_json(self, url):
         """Lade JSON von URL"""
