@@ -172,11 +172,16 @@ class StarCitizenDataImporter:
                 continue
             
             name = item_data.get("name", "Unknown")
-            location = item_data.get("location", item_data.get("found_at", "Unknown"))
+            
+            # Location kann ein String oder ein Dict sein
+            location = item_data.get("location", "Unknown")
+            if isinstance(location, dict):
+                location = location.get("name", "Unknown")
+            location = str(location) if location else "Unknown"
             
             # Mining-Type bestimmen
             item_type = "OTHER"
-            type_str = item_data.get("type", "").lower()
+            type_str = str(item_data.get("type", "")).lower()
             if "hand" in type_str or "hand_mineable" in type_str:
                 item_type = "HAND_MINEABLE"
             elif "ship" in type_str or "ship_mineable" in type_str:
@@ -251,7 +256,7 @@ class StarCitizenDataImporter:
             except:
                 xp = 0
             
-            # NEUER CODE: Reputation-Daten extrahieren
+            # Reputation-Daten extrahieren
             reputation_faction = "Unknown"
             reputation_amount = 0
             
