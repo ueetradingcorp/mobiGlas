@@ -201,7 +201,7 @@ class StarCitizenDataImporter:
         return imported
     
     def import_missions(self):
-        """Importiere Missionen"""
+        """Importiere Missionen mit Reputation-Daten"""
         logger.info("Importiere Missionen...")
         
         data = self.fetch_json(self.missions_url)
@@ -251,15 +251,35 @@ class StarCitizenDataImporter:
             except:
                 xp = 0
             
+            # NEUER CODE: Reputation-Daten extrahieren
+            reputation_faction = "Unknown"
+            reputation_amount = 0
+            
+            reputation_gained = mission_data.get("reputation_gained", [])
+            if isinstance(reputation_gained, list) and len(reputation_gained) > 0:
+                rep_data = reputation_gained[0]
+                if isinstance(rep_data, dict):
+                    reputation_faction = rep_data.get("faction", "Unknown")
+                    reputation_amount = rep_data.get("amount", 0)
+                    try:
+                        reputation_amount = int(reputation_amount)
+                    except:
+                        reputation_amount = 0
+            
             try:
                 query = """
                     INSERT INTO missions 
-                    (name, faction, mission_type, reward_auc, reward_xp)
-                    VALUES (%s, %s, %s, %s, %s)
+                    (name, faction, mission_type, reward_auc, reward_xp, reputation_faction, reputation_amount)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (name) DO UPDATE 
-                    SET faction = EXCLUDED.faction
+                    SET faction = EXCLUDED.faction,
+                        reputation_faction = EXCLUDED.reputation_faction,
+                        reputation_amount = EXCLUDED.reputation_amount
                 """
-                self.db.execute_update(query, (name, faction, mission_type, reward, xp))
+                self.db.execute_update(
+                    query, 
+                    (name, faction, mission_type, reward, xp, reputation_faction, reputation_amount)
+                )
                 imported += 1
             except Exception as e:
                 logger.debug(f"Fehler bei Mission {name}: {e}")
