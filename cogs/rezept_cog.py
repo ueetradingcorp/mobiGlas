@@ -27,8 +27,39 @@ class RezeptCog(commands.Cog):
         user_role_ids = [role.id for role in interaction.user.roles]
         return any(role_id in USER_ROLES for role_id in user_role_ids)
     
+    async def blueprint_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        """Autocomplete für Blueprint-Namen"""
+        
+        if not current:
+            # Keine Eingabe - zeige Top 25 Blueprints
+            query = "SELECT name FROM blueprints ORDER BY name LIMIT 25"
+            results = self.db.execute_query(query)
+        else:
+            # Suche Blueprints die mit dem aktuellen Text starten oder ihn enthalten
+            query = """
+                SELECT name FROM blueprints 
+                WHERE name ILIKE %s 
+                ORDER BY name 
+                LIMIT 25
+            """
+            results = self.db.execute_query(query, (f"%{current}%",))
+        
+        if not results:
+            return []
+        
+        # Erstelle Choice-Liste für Discord
+        choices = [
+            app_commands.Choice(name=result[0], value=result[0])
+            for result in results
+        ]
+        
+        return choices
+    
     @app_commands.command(name="rezept", description="Zeige ein Blueprint-Rezept an")
-    @app_commands.describe(blueprint="Name oder ID des Blueprints (z.B. P8-AR)")
+    @app_commands.describe(blueprint="Name des Blueprints")
+    @app_commands.autocomplete(blueprint=blueprint_autocomplete)
     async def rezept(self, interaction: discord.Interaction, blueprint: str):
         """Zeige Rezept-Informationen für einen Blueprint"""
         
@@ -47,10 +78,10 @@ class RezeptCog(commands.Cog):
             query = """
                 SELECT id, name, crafting_time_minutes, source
                 FROM blueprints
-                WHERE name ILIKE %s OR source ILIKE %s
+                WHERE name = %s
                 LIMIT 1
             """
-            result = self.db.execute_query(query, (f"%{blueprint}%", f"%{blueprint}%"))
+            result = self.db.execute_query(query, (blueprint,))
             
             if not result:
                 await interaction.followup.send(
@@ -115,7 +146,8 @@ class RezeptCog(commands.Cog):
             )
     
     @app_commands.command(name="rezept-eintragen", description="Trage einen Blueprint in dein Inventar ein")
-    @app_commands.describe(blueprint="Name oder ID des Blueprints")
+    @app_commands.describe(blueprint="Name des Blueprints")
+    @app_commands.autocomplete(blueprint=blueprint_autocomplete)
     async def rezept_eintragen(self, interaction: discord.Interaction, blueprint: str):
         """Speichere einen Blueprint im User-Inventar"""
         
@@ -130,8 +162,8 @@ class RezeptCog(commands.Cog):
         
         try:
             # Suche Blueprint
-            query = "SELECT id FROM blueprints WHERE name ILIKE %s OR source ILIKE %s LIMIT 1"
-            result = self.db.execute_query(query, (f"%{blueprint}%", f"%{blueprint}%"))
+            query = "SELECT id FROM blueprints WHERE name = %s LIMIT 1"
+            result = self.db.execute_query(query, (blueprint,))
             
             if not result:
                 await interaction.followup.send(
@@ -177,7 +209,8 @@ class RezeptCog(commands.Cog):
             )
     
     @app_commands.command(name="rezept-entfernen", description="Entferne einen Blueprint aus deinem Inventar")
-    @app_commands.describe(blueprint="Name oder ID des Blueprints")
+    @app_commands.describe(blueprint="Name des Blueprints")
+    @app_commands.autocomplete(blueprint=blueprint_autocomplete)
     async def rezept_entfernen(self, interaction: discord.Interaction, blueprint: str):
         """Entferne einen Blueprint aus dem User-Inventar"""
         
@@ -192,8 +225,8 @@ class RezeptCog(commands.Cog):
         
         try:
             # Suche Blueprint
-            query = "SELECT id FROM blueprints WHERE name ILIKE %s OR source ILIKE %s LIMIT 1"
-            result = self.db.execute_query(query, (f"%{blueprint}%", f"%{blueprint}%"))
+            query = "SELECT id FROM blueprints WHERE name = %s LIMIT 1"
+            result = self.db.execute_query(query, (blueprint,))
             
             if not result:
                 await interaction.followup.send(
