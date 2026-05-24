@@ -251,10 +251,23 @@ class StarCitizenDataImporter:
                 if not isinstance(mission_data, dict):
                     continue
                 
-                name = mission_data.get("name", mission_data.get("title", "Unknown"))
-                faction = mission_data.get("faction", mission_data.get("giver", "Unknown"))
-                mission_type = mission_data.get("type", mission_data.get("mission_type", "Unknown"))
+                name = mission_data.get("title", mission_data.get("name", "Unknown"))
                 
+                # WICHTIG: faction kann ein Dict sein!
+                faction = mission_data.get("faction", "Unknown")
+                if isinstance(faction, dict):
+                    faction = faction.get("name", "Unknown")
+                faction = str(faction) if faction else "Unknown"
+                
+                # mission_giver nutzen falls faction nicht vorhanden
+                mission_giver = mission_data.get("mission_giver", "Unknown")
+                if faction == "Unknown" and mission_giver:
+                    faction = mission_giver
+                
+                mission_type = mission_data.get("type", mission_data.get("mission_type", "Unknown"))
+                mission_type = str(mission_type) if mission_type else "Unknown"
+                
+                # Reward verarbeiten
                 reward = mission_data.get("reward", mission_data.get("reward_auc", 0))
                 try:
                     reward = int(reward) if reward else 0
@@ -267,7 +280,7 @@ class StarCitizenDataImporter:
                 except:
                     xp = 0
                 
-                # Reputation-Daten
+                # Reputation-Daten - kann Array sein!
                 reputation_faction = "Unknown"
                 reputation_amount = 0
                 
@@ -276,6 +289,8 @@ class StarCitizenDataImporter:
                     rep_data = reputation_gained[0]
                     if isinstance(rep_data, dict):
                         reputation_faction = rep_data.get("faction", "Unknown")
+                        reputation_faction = str(reputation_faction) if reputation_faction else "Unknown"
+                        
                         reputation_amount = rep_data.get("amount", 0)
                         try:
                             reputation_amount = int(reputation_amount)
