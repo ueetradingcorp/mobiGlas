@@ -10,6 +10,7 @@ import logging
 import asyncio
 from database.db_connection import get_db
 from database.import_data import StarCitizenDataImporter
+from config import ADMIN_ROLES
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,11 @@ class AdminCog(commands.Cog):
     
     def is_admin(self, interaction: discord.Interaction) -> bool:
         """Prüfe ob User Admin-Rechte hat"""
-        return interaction.user.guild_permissions.administrator
+        if not interaction.user.roles:
+            return False
+        
+        user_role_ids = [role.id for role in interaction.user.roles]
+        return any(role_id in ADMIN_ROLES for role_id in user_role_ids)
     
     @app_commands.command(name="import-daten", description="Importiere Star Citizen Daten (ADMIN ONLY)")
     @app_commands.describe(
@@ -35,7 +40,7 @@ class AdminCog(commands.Cog):
         # Nur Admins
         if not self.is_admin(interaction):
             await interaction.response.send_message(
-                "❌ Nur Admins können diesen Befehl nutzen.",
+                "❌ Nur Direktoren und Bot-Admins können diesen Befehl nutzen.",
                 ephemeral=True
             )
             return
@@ -117,7 +122,7 @@ class AdminCog(commands.Cog):
         # Nur Admins
         if not self.is_admin(interaction):
             await interaction.response.send_message(
-                "❌ Nur Admins können diesen Befehl nutzen.",
+                "❌ Nur Direktoren und Bot-Admins können diesen Befehl nutzen.",
                 ephemeral=True
             )
             return
@@ -188,6 +193,14 @@ class AdminCog(commands.Cog):
     @app_commands.command(name="ping", description="Prüfe Bot-Latenz")
     async def ping(self, interaction: discord.Interaction):
         """Zeige die Bot-Latenz"""
+        
+        # Nur Admins
+        if not self.is_admin(interaction):
+            await interaction.response.send_message(
+                "❌ Nur Direktoren und Bot-Admins können diesen Befehl nutzen.",
+                ephemeral=True
+            )
+            return
         
         latency = round(self.bot.latency * 1000)
         
