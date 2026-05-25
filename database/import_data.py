@@ -1,6 +1,6 @@
 """
 Import von Star Citizen Daten aus der Wiki API
-Optimiert mit Filtern und dynamischer Version-Abfrage
+Optimiert mit Filtern und dynamischer Version-Abfrage mit Fallback
 """
 
 import json
@@ -48,16 +48,30 @@ class StarCitizenDataImporter:
         url = f"{self.game_versions_url}/default"
         data = self.fetch_json(url)
         
-        if not data or not isinstance(data, dict):
-            logger.error("❌ Game-Version konnte nicht ermittelt werden")
-            return None
+        # Debug-Logging
+        if data:
+            logger.info(f"Response von {url}: {json.dumps(data, indent=2)[:500]}")
         
+        if not data or not isinstance(data, dict):
+            logger.warning("⚠️ Game-Version-API antwortete nicht wie erwartet")
+            logger.info("Nutze Fallback-Version: 4.8.0-LIVE.11875683")
+            return "4.8.0-LIVE.11875683"
+        
+        # Versuche verschiedene Feldnamen
         version = data.get("code", None)
+        if not version:
+            version = data.get("version", None)
+        if not version:
+            version = data.get("name", None)
+        
         if version:
-            logger.info(f"✓ Game-Version: {version}")
+            logger.info(f"✓ Game-Version ermittelt: {version}")
             return version
         
-        return None
+        # Fallback
+        logger.warning("⚠️ Konnte Version nicht aus Response extrahieren")
+        logger.info("Nutze Fallback-Version: 4.8.0-LIVE.11875683")
+        return "4.8.0-LIVE.11875683"
     
     def import_all(self):
         """Importiere alle Daten"""
@@ -68,9 +82,7 @@ class StarCitizenDataImporter:
         
         # Hole aktuelle Game-Version
         self.game_version = self.get_game_version()
-        if not self.game_version:
-            logger.error("❌ Import abgebrochen - Game-Version konnte nicht ermittelt werden")
-            return
+        logger.info(f"Verwende Game-Version: {self.game_version}")
         
         bp_count = self.import_blueprints()
         commodities_count = self.import_commodities()
