@@ -48,7 +48,6 @@ class StarCitizenDataImporter:
         url = f"{self.game_versions_url}/default"
         data = self.fetch_json(url)
         
-        # Debug-Logging
         if data:
             logger.info(f"Response von {url}: {json.dumps(data, indent=2)[:500]}")
         
@@ -57,7 +56,6 @@ class StarCitizenDataImporter:
             logger.info("Nutze Fallback-Version: 4.8.0-LIVE.11875683")
             return "4.8.0-LIVE.11875683"
         
-        # Versuche verschiedene Feldnamen
         version = data.get("code", None)
         if not version:
             version = data.get("version", None)
@@ -68,7 +66,6 @@ class StarCitizenDataImporter:
             logger.info(f"✓ Game-Version ermittelt: {version}")
             return version
         
-        # Fallback
         logger.warning("⚠️ Konnte Version nicht aus Response extrahieren")
         logger.info("Nutze Fallback-Version: 4.8.0-LIVE.11875683")
         return "4.8.0-LIVE.11875683"
@@ -80,7 +77,6 @@ class StarCitizenDataImporter:
         logger.info(f"API: {self.api_base_url}")
         logger.info("=" * 50)
         
-        # Hole aktuelle Game-Version
         self.game_version = self.get_game_version()
         logger.info(f"Verwende Game-Version: {self.game_version}")
         
@@ -109,7 +105,6 @@ class StarCitizenDataImporter:
             if not data:
                 break
             
-            # Extrahiere Blueprints
             if isinstance(data, dict) and "data" in data:
                 blueprints = data["data"]
             elif isinstance(data, list):
@@ -126,7 +121,6 @@ class StarCitizenDataImporter:
                 if not isinstance(bp_data, dict):
                     continue
                 
-                # Nutze output_name - skip wenn null
                 name = bp_data.get("output_name", None)
                 if not name or name == "Unknown":
                     name = bp_data.get("name", None)
@@ -191,14 +185,15 @@ class StarCitizenDataImporter:
         return imported
     
     def import_commodities(self):
-        """Importiere Commodities mit Pagination - nur verwendete!"""
+        """Importiere Commodities mit Pagination - nur verwendete MINEABLE!"""
         logger.info("Importiere Commodities...")
         
         imported = 0
         page = 1
         
         while True:
-            url = f"{self.commodities_url}?page[number]={page}&page[size]=200&version={self.game_version}&filter[used]=true"
+            # Wichtig: Nur mineable=true Commodities, die in Blueprints verwendet werden
+            url = f"{self.commodities_url}?page[number]={page}&page[size]=200&version={self.game_version}&filter[used]=true&filter[mineable]=true"
             data = self.fetch_json(url)
             
             if not data:
@@ -222,37 +217,37 @@ class StarCitizenDataImporter:
                 
                 name = commodity_data.get("name", "Unknown")
                 
-                # Bestimme Fundort aus location oder system
-                location = commodity_data.get("location", "Unknown")
-                if isinstance(location, dict):
-                    location = location.get("name", "Unknown")
-                if not location or location == "Unknown":
-                    system = commodity_data.get("system", "Unknown")
-                    if isinstance(system, dict):
-                        location = system.get("name", "Unknown")
-                    elif system:
-                        location = str(system)
+                # Bestimme Fundort - nutze alle verfügbaren Quellen
+                location = "Unbekannt"
                 
-                location = str(location) if location else "Unknown"
-                
-                # Bestimme Mining-Type
-                item_type = "OTHER"
-                kind = str(commodity_data.get("kind", "")).lower()
-                
-                if "mineable" in kind:
-                    # Prüfe ob ship, fps oder ground_vehicle mineable
-                    if commodity_data.get("ship_mineable"):
-                        item_type = "SHIP_MINEABLE"
-                    elif commodity_data.get("fps_mineable"):
-                        item_type = "HAND_MINEABLE"
-                    elif commodity_data.get("ground_vehicle_mineable"):
-                        item_type = "HAND_MINEABLE"
+                # Versuche locations Array
+                locations = commodity_data.get("locations", [])
+                if locations and isinstance(locations, list) and len(locations) > 0:
+                    loc = locations[0]
+                    if isinstance(loc, dict):
+                        location = loc.get("name", "Unbekannt")
                     else:
-                        item_type = "SHIP_MINEABLE"
-                elif "harvestable" in kind:
+                        location = str(loc)
+                
+                # Fallback: systems
+                if location == "Unbekannt":
+                    systems = commodity_data.get("systems", [])
+                    if systems and isinstance(systems, list) and len(systems) > 0:
+                        sys = systems[0]
+                        if isinstance(sys, dict):
+                            location = sys.get("name", "Unbekannt")
+                        else:
+                            location = str(sys)
+                
+                location = str(location) if location else "Unbekannt"
+                
+                # Bestimme Mining-Type - WICHTIG: Nur HAND oder SHIP!
+                item_type = "SHIP_MINEABLE"  # Standard
+                
+                if commodity_data.get("fps_mineable") or commodity_data.get("ground_vehicle_mineable"):
                     item_type = "HAND_MINEABLE"
-                elif "salvage" in kind:
-                    item_type = "OTHER"
+                elif commodity_data.get("harvestable"):
+                    item_type = "HAND_MINEABLE"
                 
                 try:
                     query = """
@@ -311,13 +306,11 @@ class StarCitizenDataImporter:
                 
                 name = mission_data.get("title", mission_data.get("name", "Unknown"))
                 
-                # faction kann ein Dict sein!
                 faction = mission_data.get("faction", "Unknown")
                 if isinstance(faction, dict):
                     faction = faction.get("name", "Unknown")
                 faction = str(faction) if faction else "Unknown"
                 
-                # mission_giver nutzen falls faction nicht vorhanden
                 mission_giver = mission_data.get("mission_giver", "Unknown")
                 if faction == "Unknown" and mission_giver:
                     faction = mission_giver
@@ -337,7 +330,6 @@ class StarCitizenDataImporter:
                 except:
                     xp = 0
                 
-                # Reputation-Daten
                 reputation_faction = "Unknown"
                 reputation_amount = 0
                 
