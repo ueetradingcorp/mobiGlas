@@ -29,6 +29,13 @@ class StarCitizenDataImporter:
         self.blueprints_url = f"{self.api_base_url}/api/blueprints"
         self.commodities_url = f"{self.api_base_url}/api/commodities"
         self.missions_url = f"{self.api_base_url}/api/missions"
+        
+        # Hole Game-Version beim Initialisieren
+        self._init_game_version()
+    
+    def _init_game_version(self):
+        """Initialisiere Game-Version beim Konstruktor"""
+        self.game_version = self.get_game_version()
     
     def fetch_json(self, url):
         """Lade JSON von URL"""
@@ -70,30 +77,10 @@ class StarCitizenDataImporter:
         logger.info("Nutze Fallback-Version: 4.8.0-LIVE.11875683")
         return "4.8.0-LIVE.11875683"
     
-    def import_all(self):
-        """Importiere alle Daten"""
-        logger.info("=" * 50)
-        logger.info("Starte Star Citizen Daten-Import...")
-        logger.info(f"API: {self.api_base_url}")
-        logger.info("=" * 50)
-        
-        self.game_version = self.get_game_version()
-        logger.info(f"Verwende Game-Version: {self.game_version}")
-        
-        bp_count = self.import_blueprints()
-        commodities_count = self.import_commodities()
-        missions_count = self.import_missions()
-        
-        logger.info("=" * 50)
-        logger.info("✅ IMPORT ABGESCHLOSSEN!")
-        logger.info(f"   - {bp_count} Blueprints")
-        logger.info(f"   - {commodities_count} Commodities")
-        logger.info(f"   - {missions_count} Missionen")
-        logger.info("=" * 50)
-    
     def import_blueprints(self):
         """Importiere Blueprint-Daten mit Pagination"""
         logger.info("Importiere Blueprints...")
+        logger.info(f"Verwende Game-Version: {self.game_version}")
         
         imported = 0
         page = 1
@@ -187,13 +174,12 @@ class StarCitizenDataImporter:
     def import_commodities(self):
         """Importiere Commodities mit Pagination - ALLE mineablen, nicht nur die verwendeten!"""
         logger.info("Importiere Commodities...")
+        logger.info(f"Verwende Game-Version: {self.game_version}")
         
         imported = 0
         page = 1
         
         while True:
-            # Nur mineable=true (alle abbaubaren Materialien)
-            # filter[used]=true ENTFERNT - wir wollen ALLE mineablen, nicht nur die in aktuellen Blueprints verwendeten
             url = f"{self.commodities_url}?page[number]={page}&page[size]=200&version={self.game_version}&filter[mineable]=true"
             data = self.fetch_json(url)
             
@@ -278,6 +264,7 @@ class StarCitizenDataImporter:
     def import_missions(self):
         """Importiere Missionen mit Pagination - nur veröffentlichte Blueprint-Missionen"""
         logger.info("Importiere Missionen...")
+        logger.info(f"Verwende Game-Version: {self.game_version}")
         
         imported = 0
         page = 1
