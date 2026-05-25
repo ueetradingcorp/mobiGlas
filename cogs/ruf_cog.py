@@ -75,11 +75,12 @@ class RufCog(commands.Cog):
         
         try:
             query = """
-                SELECT name, mission_type, reward_xp, reward_auc, reputation_amount
+                SELECT name, mission_type, reputation_amount
                 FROM missions
                 WHERE reputation_faction = %s
-                ORDER BY reputation_amount DESC, reward_xp DESC
-                LIMIT 20
+                AND reputation_amount > 0
+                ORDER BY reputation_amount DESC, name ASC
+                LIMIT 50
             """
             results = self.db.execute_query(query, (fraktion,))
             
@@ -94,31 +95,25 @@ class RufCog(commands.Cog):
                 color=discord.Color.gold()
             )
             
-            # Berechne benötigte Reputation
+            # Berechne Statistiken
             total_missions = len(results)
-            total_rep = sum(result[4] if result[4] else 0 for result in results)
-            total_xp = sum(result[2] if result[2] else 0 for result in results)
-            total_auc = sum(result[3] if result[3] else 0 for result in results)
+            total_rep = sum(result[2] if result[2] else 0 for result in results)
             
             # Statistiken
             embed.add_field(
-                name="📊 Benötigte Reputation & Rewards",
-                value=f"**Benötigte Rep-Punkte:** ~{total_rep:,}\n"
-                      f"**Gesamt XP:** ~{total_xp:,}\n"
-                      f"**Gesamt aUEC:** ~{total_auc:,}\n"
+                name="📊 Ruf-Anforderung",
+                value=f"**Gesamt Reputation Punkte:** ~{total_rep:,}\n"
                       f"**Anzahl Missionen:** {total_missions}",
                 inline=False
             )
             
             # Missionen aufzählen
             missions_text = ""
-            for i, (name, mission_type, reward_xp, reward_auc, rep_amount) in enumerate(results[:15], 1):
-                xp_str = f"{reward_xp} XP" if reward_xp else "? XP"
-                auc_str = f"{reward_auc:,} aUEC" if reward_auc else "? aUEC"
+            for i, (name, mission_type, rep_amount) in enumerate(results[:20], 1):
                 rep_str = f"{rep_amount} Rep" if rep_amount else "? Rep"
                 
                 missions_text += f"**{i}. {name}**\n"
-                missions_text += f"   💰 {auc_str} | ⭐ {xp_str} | 👑 {rep_str}\n"
+                missions_text += f"   👑 {rep_str}\n"
             
             if missions_text:
                 embed.add_field(
@@ -127,8 +122,8 @@ class RufCog(commands.Cog):
                     inline=False
                 )
             
-            if total_missions > 15:
-                embed.set_footer(text=f"mobiGlas Star Citizen Bot | Zeigt 15 von {total_missions} Missionen")
+            if total_missions > 20:
+                embed.set_footer(text=f"mobiGlas Star Citizen Bot | Zeigt 20 von {total_missions} Missionen")
             else:
                 embed.set_footer(text="mobiGlas Star Citizen Bot")
             
