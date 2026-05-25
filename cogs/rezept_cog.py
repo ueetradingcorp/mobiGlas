@@ -139,12 +139,21 @@ class RezeptCog(commands.Cog):
                 inline=False
             )
             
-            # Rezeptinhaber
+            # Rezeptinhaber - ohne Ping, mit echtem Namen
             if user_result:
-                owner_ids = [str(row[0]) for row in user_result]
+                owner_names = []
+                for row in user_result:
+                    user_id = row[0]
+                    try:
+                        user = await self.bot.fetch_user(user_id)
+                        owner_names.append(user.name)
+                    except discord.NotFound:
+                        owner_names.append(f"User#{user_id}")
+                
+                owners_display = ", ".join(owner_names) if owner_names else "Unbekannt"
                 embed.add_field(
                     name="👤 Rezeptinhaber",
-                    value=f"<@{owner_ids[0]}>" if owner_ids else "Unbekannt",
+                    value=owners_display,
                     inline=False
                 )
             else:
