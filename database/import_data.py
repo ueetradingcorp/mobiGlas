@@ -1,7 +1,6 @@
 """
 Import von Star Citizen Daten aus der Wiki API
-Importiert Blueprints, Items, Missionen direkt von der Star Citizen Wiki API
-Mit Pagination für komplette Daten
+Optimiert mit Filtern und dynamischer Version-Abfrage
 """
 
 import json
@@ -23,10 +22,12 @@ class StarCitizenDataImporter:
         """
         self.api_base_url = api_base_url.rstrip('/')
         self.db = get_db()
+        self.game_version = None
         
         # API Endpoints
-        self.items_url = f"{self.api_base_url}/api/items"
+        self.game_versions_url = f"{self.api_base_url}/api/game-versions"
         self.blueprints_url = f"{self.api_base_url}/api/blueprints"
+        self.commodities_url = f"{self.api_base_url}/api/commodities"
         self.missions_url = f"{self.api_base_url}/api/missions"
     
     def fetch_json(self, url):
@@ -40,6 +41,24 @@ class StarCitizenDataImporter:
             logger.error(f"Fehler beim Download von {url}: {e}")
             return None
     
+    def get_game_version(self):
+        """Hole die aktuelle Standard Game-Version"""
+        logger.info("Ermittle aktuelle Game-Version...")
+        
+        url = f"{self.game_versions_url}/default"
+        data = self.fetch_json(url)
+        
+        if not data or not isinstance(data, dict):
+            logger.error("❌ Game-Version konnte nicht ermittelt werden")
+            return None
+        
+        version = data.get("code", None)
+        if version:
+            logger.info(f"✓ Game-Version: {version}")
+            return version
+        
+        return None
+    
     def import_all(self):
         """Importiere alle Daten"""
         logger.info("=" * 50)
@@ -47,14 +66,20 @@ class StarCitizenDataImporter:
         logger.info(f"API: {self.api_base_url}")
         logger.info("=" * 50)
         
+        # Hole aktuelle Game-Version
+        self.game_version = self.get_game_version()
+        if not self.game_version:
+            logger.error("❌ Import abgebrochen - Game-Version konnte nicht ermittelt werden")
+            return
+        
         bp_count = self.import_blueprints()
-        items_count = self.import_items()
+        commodities_count = self.import_commodities()
         missions_count = self.import_missions()
         
         logger.info("=" * 50)
         logger.info("✅ IMPORT ABGESCHLOSSEN!")
         logger.info(f"   - {bp_count} Blueprints")
-        logger.info(f"   - {items_count} Items")
+        logger.info(f"   - {commodities_count} Commodities")
         logger.info(f"   - {missions_count} Missionen")
         logger.info("=" * 50)
     
@@ -66,7 +91,7 @@ class StarCitizenDataImporter:
         page = 1
         
         while True:
-            url = f"{self.blueprints_url}?page={page}"
+            url = f"{self.blueprints_url}?page[number]={page}&page[size]=200&version={self.game_version}"
             data = self.fetch_json(url)
             
             if not data:
@@ -89,7 +114,13 @@ class StarCitizenDataImporter:
                 if not isinstance(bp_data, dict):
                     continue
                 
-                name = bp_data.get("output_name", bp_data.get("name", "Unknown"))
+                # Nutze output_name - skip wenn null
+                name = bp_data.get("output_name", None)
+                if not name or name == "Unknown":
+                    name = bp_data.get("name", None)
+                
+                if not name:
+                    continue
                 
                 craft_time_seconds = bp_data.get("craft_time_seconds", 0)
                 craft_time_minutes = int(craft_time_seconds / 60) if craft_time_seconds else 0
@@ -139,87 +170,112 @@ class StarCitizenDataImporter:
             imported += page_imported
             logger.info(f"   Seite {page}: {page_imported} Blueprints")
             
+            if len(blueprints) < 200:
+                break
+            
             page += 1
         
         logger.info(f"✓ {imported} Blueprints importiert!")
         return imported
     
-    def import_items(self):
-        """Importiere Items mit Pagination"""
-        logger.info("Importiere Items...")
+    def import_commodities(self):
+        """Importiere Commodities mit Pagination - nur verwendete!"""
+        logger.info("Importiere Commodities...")
         
         imported = 0
         page = 1
         
         while True:
-            url = f"{self.items_url}?page={page}"
+            url = f"{self.commodities_url}?page[number]={page}&page[size]=200&version={self.game_version}&filter[used]=true"
             data = self.fetch_json(url)
             
             if not data:
                 break
             
             if isinstance(data, dict) and "data" in data:
-                items = data["data"]
+                commodities = data["data"]
             elif isinstance(data, list):
-                items = data
+                commodities = data
             else:
                 break
             
-            if not items or not isinstance(items, list) or len(items) == 0:
+            if not commodities or not isinstance(commodities, list) or len(commodities) == 0:
                 break
             
             page_imported = 0
             
-            for item_data in items:
-                if not isinstance(item_data, dict):
+            for commodity_data in commodities:
+                if not isinstance(commodity_data, dict):
                     continue
                 
-                name = item_data.get("name", "Unknown")
+                name = commodity_data.get("name", "Unknown")
                 
-                location = item_data.get("location", "Unknown")
+                # Bestimme Fundort aus location oder system
+                location = commodity_data.get("location", "Unknown")
                 if isinstance(location, dict):
                     location = location.get("name", "Unknown")
+                if not location or location == "Unknown":
+                    system = commodity_data.get("system", "Unknown")
+                    if isinstance(system, dict):
+                        location = system.get("name", "Unknown")
+                    elif system:
+                        location = str(system)
+                
                 location = str(location) if location else "Unknown"
                 
+                # Bestimme Mining-Type
                 item_type = "OTHER"
-                type_str = str(item_data.get("type", "")).lower()
-                if "hand" in type_str or "hand_mineable" in type_str:
+                kind = str(commodity_data.get("kind", "")).lower()
+                
+                if "mineable" in kind:
+                    # Prüfe ob ship, fps oder ground_vehicle mineable
+                    if commodity_data.get("ship_mineable"):
+                        item_type = "SHIP_MINEABLE"
+                    elif commodity_data.get("fps_mineable"):
+                        item_type = "HAND_MINEABLE"
+                    elif commodity_data.get("ground_vehicle_mineable"):
+                        item_type = "HAND_MINEABLE"
+                    else:
+                        item_type = "SHIP_MINEABLE"
+                elif "harvestable" in kind:
                     item_type = "HAND_MINEABLE"
-                elif "ship" in type_str or "ship_mineable" in type_str:
-                    item_type = "SHIP_MINEABLE"
-                elif "mission" in type_str or "quest" in type_str:
-                    item_type = "NPC_MISSION"
+                elif "salvage" in kind:
+                    item_type = "OTHER"
                 
                 try:
                     query = """
                         INSERT INTO crafting_materials (name, location, mining_type)
                         VALUES (%s, %s, %s)
                         ON CONFLICT (name) DO UPDATE 
-                        SET location = EXCLUDED.location
+                        SET location = EXCLUDED.location,
+                            mining_type = EXCLUDED.mining_type
                     """
                     self.db.execute_update(query, (name, location, item_type))
                     page_imported += 1
                 except Exception as e:
-                    logger.debug(f"Fehler bei Item {name}: {e}")
+                    logger.debug(f"Fehler bei Commodity {name}: {e}")
                     continue
             
             imported += page_imported
-            logger.info(f"   Seite {page}: {page_imported} Items")
+            logger.info(f"   Seite {page}: {page_imported} Commodities")
+            
+            if len(commodities) < 200:
+                break
             
             page += 1
         
-        logger.info(f"✓ {imported} Items importiert!")
+        logger.info(f"✓ {imported} Commodities importiert!")
         return imported
     
     def import_missions(self):
-        """Importiere Missionen mit Pagination"""
+        """Importiere Missionen mit Pagination - nur veröffentlichte Blueprint-Missionen"""
         logger.info("Importiere Missionen...")
         
         imported = 0
         page = 1
         
         while True:
-            url = f"{self.missions_url}?page={page}"
+            url = f"{self.missions_url}?page[number]={page}&page[size]=200&version={self.game_version}&filter[include_unreleased]=false&filter[has_blueprints]=true"
             data = self.fetch_json(url)
             
             if not data:
@@ -236,17 +292,14 @@ class StarCitizenDataImporter:
                 break
             
             page_imported = 0
-            processed = 0
             
             for mission_data in missions:
-                processed += 1
-                
                 if not isinstance(mission_data, dict):
                     continue
                 
                 name = mission_data.get("title", mission_data.get("name", "Unknown"))
                 
-                # WICHTIG: faction kann ein Dict sein!
+                # faction kann ein Dict sein!
                 faction = mission_data.get("faction", "Unknown")
                 if isinstance(faction, dict):
                     faction = faction.get("name", "Unknown")
@@ -260,7 +313,6 @@ class StarCitizenDataImporter:
                 mission_type = mission_data.get("type", mission_data.get("mission_type", "Unknown"))
                 mission_type = str(mission_type) if mission_type else "Unknown"
                 
-                # Reward verarbeiten
                 reward = mission_data.get("reward", mission_data.get("reward_auc", 0))
                 try:
                     reward = int(reward) if reward else 0
@@ -273,7 +325,7 @@ class StarCitizenDataImporter:
                 except:
                     xp = 0
                 
-                # Reputation-Daten - kann Array sein!
+                # Reputation-Daten
                 reputation_faction = "Unknown"
                 reputation_amount = 0
                 
@@ -311,6 +363,9 @@ class StarCitizenDataImporter:
             
             imported += page_imported
             logger.info(f"   Seite {page}: {page_imported} Missionen")
+            
+            if len(missions) < 200:
+                break
             
             page += 1
         
