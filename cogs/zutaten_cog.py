@@ -33,12 +33,17 @@ class ZutatenCog(commands.Cog):
         """Autocomplete für Zutat-Namen"""
         
         if not current:
-            query = "SELECT name FROM crafting_materials ORDER BY name LIMIT 25"
+            query = """
+                SELECT name FROM crafting_materials 
+                WHERE mining_type IN ('HAND_MINEABLE', 'SHIP_MINEABLE')
+                ORDER BY name LIMIT 25
+            """
             results = self.db.execute_query(query)
         else:
             query = """
                 SELECT name FROM crafting_materials 
                 WHERE name ILIKE %s 
+                AND mining_type IN ('HAND_MINEABLE', 'SHIP_MINEABLE')
                 ORDER BY name 
                 LIMIT 25
             """
@@ -74,6 +79,7 @@ class ZutatenCog(commands.Cog):
                 SELECT name, location, mining_type
                 FROM crafting_materials
                 WHERE name = %s
+                AND mining_type IN ('HAND_MINEABLE', 'SHIP_MINEABLE')
                 LIMIT 1
             """
             result = self.db.execute_query(query, (zutat,))
@@ -86,12 +92,10 @@ class ZutatenCog(commands.Cog):
             
             name, location, mining_type = result[0]
             
-            # Bestimme das Icon basierend auf Mining-Type
+            # Abbau-Typ anzeigen
             type_icons = {
                 "HAND_MINEABLE": "🚶 Hand-abbaubar",
                 "SHIP_MINEABLE": "🚀 Schiff-abbaubar",
-                "NPC_MISSION": "📋 NPC-Mission",
-                "OTHER": "❓ Sonstiges"
             }
             
             type_display = type_icons.get(mining_type, f"❓ {mining_type}")
@@ -103,7 +107,7 @@ class ZutatenCog(commands.Cog):
             
             embed.add_field(
                 name="📍 Fundort",
-                value=location if location != "Unknown" else "Unbekannt",
+                value=location if location != "Unbekannt" else "Wird noch erforscht",
                 inline=False
             )
             
