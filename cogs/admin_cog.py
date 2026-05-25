@@ -57,11 +57,15 @@ class AdminCog(commands.Cog):
         
         try:
             logger.info(f"Starte Daten-Import von: {daten_quelle}")
-            await interaction.followup.send(
-                "⏳ Importiere Daten im Hintergrund...\n"
-                "Das kann mehrere Minuten dauern.\n"
-                "Du wirst benachrichtigt wenn fertig!"
-            )
+            
+            try:
+                await interaction.followup.send(
+                    "⏳ Importiere Daten im Hintergrund...\n"
+                    "Das kann mehrere Minuten dauern.\n"
+                    "Du wirst benachrichtigt wenn fertig!"
+                )
+            except discord.errors.HTTPException as e:
+                logger.warning(f"Konnte erste Nachricht nicht senden: {e}")
             
             # Starte Import im Hintergrund
             self.import_in_progress = True
@@ -70,9 +74,13 @@ class AdminCog(commands.Cog):
         except Exception as e:
             logger.error(f"Fehler beim Daten-Import: {e}")
             self.import_in_progress = False
-            await interaction.followup.send(
-                f"❌ Fehler beim Import: {str(e)}"
-            )
+            
+            try:
+                await interaction.followup.send(
+                    f"❌ Fehler beim Import: {str(e)}"
+                )
+            except discord.errors.HTTPException:
+                logger.warning("Konnte Fehlermeldung nicht senden - Webhook abgelaufen")
     
     async def run_import_async(self, daten_quelle: str, interaction: discord.Interaction):
         """Führe Import asynchron aus"""
@@ -90,8 +98,8 @@ class AdminCog(commands.Cog):
             bp_result = self.db.execute_query("SELECT COUNT(*) FROM blueprints")
             bp_count = bp_result[0][0] if bp_result else 0
             
-            items_result = self.db.execute_query("SELECT COUNT(*) FROM crafting_materials")
-            items_count = items_result[0][0] if items_result else 0
+            commodities_result = self.db.execute_query("SELECT COUNT(*) FROM crafting_materials")
+            commodities_count = commodities_result[0][0] if commodities_result else 0
             
             missions_result = self.db.execute_query("SELECT COUNT(*) FROM missions")
             missions_count = missions_result[0][0] if missions_result else 0
@@ -102,18 +110,27 @@ class AdminCog(commands.Cog):
                 color=discord.Color.green()
             )
             embed.add_field(name="📦 Blueprints", value=f"{bp_count:,}", inline=True)
-            embed.add_field(name="🔨 Items", value=f"{items_count:,}", inline=True)
+            embed.add_field(name="📦 Commodities", value=f"{commodities_count:,}", inline=True)
             embed.add_field(name="👑 Missionen", value=f"{missions_count:,}", inline=True)
             
-            await interaction.followup.send(embed=embed)
+            try:
+                await interaction.followup.send(embed=embed)
+            except discord.errors.HTTPException:
+                logger.warning("Konnte Ergebnis-Nachricht nicht senden - Webhook abgelaufen")
+                logger.info("Aber Import war erfolgreich abgeschlossen!")
+            
             logger.info(f"✅ Import erfolgreich abgeschlossen!")
             
         except Exception as e:
             self.import_in_progress = False
             logger.error(f"Fehler beim async Import: {e}")
-            await interaction.followup.send(
-                f"❌ Fehler beim Import: {str(e)}"
-            )
+            
+            try:
+                await interaction.followup.send(
+                    f"❌ Fehler beim Import: {str(e)}"
+                )
+            except discord.errors.HTTPException:
+                logger.warning("Konnte Fehlermeldung nicht senden - Webhook abgelaufen")
     
     @app_commands.command(name="db-status", description="Zeige Datenbank-Status (ADMIN ONLY)")
     async def db_status(self, interaction: discord.Interaction):
@@ -134,8 +151,8 @@ class AdminCog(commands.Cog):
             bp_count_result = self.db.execute_query("SELECT COUNT(*) FROM blueprints")
             bp_count = bp_count_result[0][0] if bp_count_result else 0
             
-            items_count_result = self.db.execute_query("SELECT COUNT(*) FROM crafting_materials")
-            items_count = items_count_result[0][0] if items_count_result else 0
+            commodities_result = self.db.execute_query("SELECT COUNT(*) FROM crafting_materials")
+            commodities_count = commodities_result[0][0] if commodities_result else 0
             
             missions_count_result = self.db.execute_query("SELECT COUNT(*) FROM missions")
             missions_count = missions_count_result[0][0] if missions_count_result else 0
@@ -156,8 +173,8 @@ class AdminCog(commands.Cog):
             )
             
             embed.add_field(
-                name="🔨 Crafting-Materialien",
-                value=f"{items_count:,}",
+                name="📦 Commodities",
+                value=f"{commodities_count:,}",
                 inline=True
             )
             
