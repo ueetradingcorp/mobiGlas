@@ -185,15 +185,16 @@ class StarCitizenDataImporter:
         return imported
     
     def import_commodities(self):
-        """Importiere Commodities mit Pagination - nur verwendete MINEABLE!"""
+        """Importiere Commodities mit Pagination - ALLE mineablen, nicht nur die verwendeten!"""
         logger.info("Importiere Commodities...")
         
         imported = 0
         page = 1
         
         while True:
-            # Wichtig: Nur mineable=true Commodities, die in Blueprints verwendet werden
-            url = f"{self.commodities_url}?page[number]={page}&page[size]=200&version={self.game_version}&filter[used]=true&filter[mineable]=true"
+            # Nur mineable=true (alle abbaubaren Materialien)
+            # filter[used]=true ENTFERNT - wir wollen ALLE mineablen, nicht nur die in aktuellen Blueprints verwendeten
+            url = f"{self.commodities_url}?page[number]={page}&page[size]=200&version={self.game_version}&filter[mineable]=true"
             data = self.fetch_json(url)
             
             if not data:
