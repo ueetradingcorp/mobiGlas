@@ -175,67 +175,70 @@ class StarCitizenDataImporter:
         """Importiere Commodities mit Pagination - ALLE mineablen, nicht nur die verwendeten!"""
         logger.info("Importiere Commodities...")
         logger.info(f"Verwende Game-Version: {self.game_version}")
-        
+    
         imported = 0
         page = 1
-        
+    
         while True:
             url = f"{self.commodities_url}?page[number]={page}&page[size]=200&version={self.game_version}&filter[mineable]=true"
             data = self.fetch_json(url)
-            
+        
             if not data:
                 break
-            
+        
             if isinstance(data, dict) and "data" in data:
                 commodities = data["data"]
             elif isinstance(data, list):
                 commodities = data
             else:
                 break
-            
+        
             if not commodities or not isinstance(commodities, list) or len(commodities) == 0:
                 break
-            
+        
             page_imported = 0
-            
+        
             for commodity_data in commodities:
                 if not isinstance(commodity_data, dict):
                     continue
-                
+            
                 name = commodity_data.get("name", "Unknown")
-                
-                # Bestimme Fundort - nutze alle verfügbaren Quellen
-                location = "Unbekannt"
-                
-                # Versuche locations Array
+            
+                # Sammle ALLE Fundorte
+                locations_list = []
+            
                 locations = commodity_data.get("locations", [])
-                if locations and isinstance(locations, list) and len(locations) > 0:
-                    loc = locations[0]
-                    if isinstance(loc, dict):
-                        location = loc.get("name", "Unbekannt")
-                    else:
-                        location = str(loc)
-                
-                # Fallback: systems
-                if location == "Unbekannt":
-                    systems = commodity_data.get("systems", [])
-                    if systems and isinstance(systems, list) and len(systems) > 0:
-                        sys = systems[0]
-                        if isinstance(sys, dict):
-                            location = sys.get("name", "Unbekannt")
+                if locations and isinstance(locations, list):
+                    for loc in locations:
+                        if isinstance(loc, dict):
+                            loc_name = loc.get("name", "Unbekannt")
                         else:
-                            location = str(sys)
-                
+                            loc_name = str(loc)
+                        locations_list.append(loc_name)
+            
+                # Fallback: systems
+                if not locations_list:
+                    systems = commodity_data.get("systems", [])
+                    if systems and isinstance(systems, list):
+                        for sys in systems:
+                            if isinstance(sys, dict):
+                                sys_name = sys.get("name", "Unbekannt")
+                            else:
+                                sys_name = str(sys)
+                            locations_list.append(sys_name)
+            
+                location = ", ".join(locations_list) if locations_list else "Unbekannt"
                 location = str(location) if location else "Unbekannt"
-                
-                # Bestimme Mining-Type - WICHTIG: Nur HAND oder SHIP!
+            
+                # Bestimme Mining-Type - WICHTIG: Prüfe die richtigen Felder!
                 item_type = "SHIP_MINEABLE"  # Standard
-                
-                if commodity_data.get("fps_mineable") or commodity_data.get("ground_vehicle_mineable"):
+            
+                # Prüfe die "has_" Felder der API!
+                if commodity_data.get("has_fps_mineables") or commodity_data.get("has_ground_vehicle_mineables"):
                     item_type = "HAND_MINEABLE"
-                elif commodity_data.get("harvestable"):
+                elif commodity_data.get("has_harvestables"):
                     item_type = "HAND_MINEABLE"
-                
+            
                 try:
                     query = """
                         INSERT INTO crafting_materials (name, location, mining_type)
@@ -249,15 +252,15 @@ class StarCitizenDataImporter:
                 except Exception as e:
                     logger.debug(f"Fehler bei Commodity {name}: {e}")
                     continue
-            
+        
             imported += page_imported
             logger.info(f"   Seite {page}: {page_imported} Commodities")
-            
+        
             if len(commodities) < 200:
                 break
-            
-            page += 1
         
+            page += 1
+    
         logger.info(f"✓ {imported} Commodities importiert!")
         return imported
     
