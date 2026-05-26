@@ -10,6 +10,121 @@ from database.db_connection import get_db
 
 logger = logging.getLogger(__name__)
 
+# Blacklist: Commodities die NICHT als Crafting-Zutaten importiert werden sollen
+EXCLUDED_COMMODITIES = {
+    "Altruciatoxin",
+    "Carinite",
+    "Compboard",
+    "Construction Materials",
+    "Decari Pod",
+    "Degnous Root",
+    "E'tam",
+    "Fotia Seedpod",
+    "Fresh Food",
+    "Golden Medmon",
+    "Heart of the Woods",
+    "Jaclium (Ore)",
+    "Lindinium (Ore)",
+    "Maze",
+    "Neograph",
+    "Neon",
+    "Organics",
+    "<= PLACEHOLDER =>",
+    "Prota",
+    "Pingala Seeds",
+    "Pitambu",
+    "Ranta Dung",
+    "Raw Ouratite",
+    "Recycled Material Composite",
+    "Revenant Pod",
+    "SLAM",
+    "Sunset Berries",
+    "Tungsten (Ore)",
+    "WiDoW",
+    "Nitrogen",
+}
+
+# Mapping: Ort-Name → (System, Typ)
+LOCATION_MAPPING = {
+    # Systeme
+    "Stanton System": ("Stanton", "System"),
+    "Pyro System": ("Pyro", "System"),
+    "Nyx System": ("Nyx", "System"),
+    
+    # Planeten
+    "Hurston": ("Stanton", "Planet"),
+    "Crusader": ("Stanton", "Planet"),
+    "ArcCorp": ("Stanton", "Planet"),
+    "microTech": ("Stanton", "Planet"),
+    
+    # Monde
+    "Aberdeen": ("Stanton", "Moon"),
+    "Arial": ("Stanton", "Moon"),
+    "Calliope": ("Stanton", "Moon"),
+    "Cellin": ("Stanton", "Moon"),
+    "Clio": ("Stanton", "Moon"),
+    "Daymar": ("Stanton", "Moon"),
+    "Euterpe": ("Stanton", "Moon"),
+    "Ita": ("Stanton", "Moon"),
+    "Lyria": ("Stanton", "Moon"),
+    "Magda": ("Stanton", "Moon"),
+    "Wala": ("Stanton", "Moon"),
+    "Yela": ("Stanton", "Moon"),
+    
+    # Asteroiden/Mining Bases
+    "Mining Base #01K-I43": ("Stanton", "Asteroid"),
+    "Mining Base #0YX-O7Z": ("Stanton", "Asteroid"),
+    "Mining Base #1XA-3GI": ("Stanton", "Asteroid"),
+    "Mining Base #365-YNZ": ("Stanton", "Asteroid"),
+    "Mining Base #4PI-3YY": ("Stanton", "Asteroid"),
+    "Mining Base #4R0-NVX": ("Stanton", "Asteroid"),
+    "Mining Base #51F-OGH": ("Stanton", "Asteroid"),
+    "Mining Base #5U5-TLC": ("Stanton", "Asteroid"),
+    "Mining Base #6IN-P02": ("Stanton", "Asteroid"),
+    "Mining Base #74H-2DO": ("Stanton", "Asteroid"),
+    "Mining Base #7IQ-29Q": ("Stanton", "Asteroid"),
+    "Mining Base #7LI-0OA": ("Stanton", "Asteroid"),
+    "Mining Base #7YH-JX7": ("Stanton", "Asteroid"),
+    "Mining Base #8CG-OSA": ("Stanton", "Asteroid"),
+    "Mining Base #8PV-WNE": ("Stanton", "Asteroid"),
+    "Mining Base #A73-HTJ": ("Stanton", "Asteroid"),
+    "Mining Base #AL5-XPD": ("Stanton", "Asteroid"),
+    "Mining Base #BBR-4JQ": ("Stanton", "Asteroid"),
+    "Mining Base #BRE-582": ("Stanton", "Asteroid"),
+    "Mining Base #BSK-IJ5": ("Stanton", "Asteroid"),
+    "Mining Base #CVF-T6H": ("Stanton", "Asteroid"),
+    "Mining Base #CZW-RRY": ("Stanton", "Asteroid"),
+    "Mining Base #E38-S5G": ("Stanton", "Asteroid"),
+    "Mining Base #GO4-CH0": ("Stanton", "Asteroid"),
+    "Mining Base #IGB-FXW": ("Stanton", "Asteroid"),
+    "Mining Base #IO3-H1F": ("Stanton", "Asteroid"),
+    "Mining Base #JUG-0KZ": ("Stanton", "Asteroid"),
+    "Mining Base #LBP-UN5": ("Stanton", "Asteroid"),
+    "Mining Base #N6J-XKH": ("Stanton", "Asteroid"),
+    "Mining Base #ODD-E9B": ("Stanton", "Asteroid"),
+    "Mining Base #OYV-JKE": ("Stanton", "Asteroid"),
+    "Mining Base #Q4U-I20": ("Stanton", "Asteroid"),
+    "Mining Base #Q9Q-090": ("Stanton", "Asteroid"),
+    "Mining Base #QXS-NBS": ("Stanton", "Asteroid"),
+    "Mining Base #R08-Y3K": ("Stanton", "Asteroid"),
+    "Mining Base #R75-5PZ": ("Stanton", "Asteroid"),
+    "Mining Base #R7J-WJ7": ("Stanton", "Asteroid"),
+    "Mining Base #RCD-OB3": ("Stanton", "Asteroid"),
+    "Mining Base #RSV-8HL": ("Stanton", "Asteroid"),
+    "Mining Base #SAG-2UN": ("Stanton", "Asteroid"),
+    "Mining Base #U5X-NGQ": ("Stanton", "Asteroid"),
+    "Mining Base #UDK-IJX": ("Stanton", "Asteroid"),
+    "Mining Base #URB-H3V": ("Stanton", "Asteroid"),
+    "Mining Base #UU6-1EI": ("Stanton", "Asteroid"),
+    "Mining Base #W79-2H7": ("Stanton", "Asteroid"),
+    "Mining Base #WUO-ZRU": ("Stanton", "Asteroid"),
+    "Mining Base #X92-IVA": ("Stanton", "Asteroid"),
+    "Mining Base #XJZ-JR2": ("Stanton", "Asteroid"),
+    "Mining Base #YTO-GLQ": ("Stanton", "Asteroid"),
+    "Mining Base #Z48-013": ("Stanton", "Asteroid"),
+    "Stanton": ("Stanton", "Star"),
+}
+
 class StarCitizenDataImporter:
     """Importiert Star Citizen Daten von der Wiki API"""
     
@@ -172,41 +287,46 @@ class StarCitizenDataImporter:
         return imported
     
     def import_commodities(self):
-        """Importiere Commodities mit Pagination - ALLE mineablen, nicht nur die verwendeten!"""
+        """Importiere Commodities mit Pagination - nur echte Crafting-Zutaten!"""
         logger.info("Importiere Commodities...")
         logger.info(f"Verwende Game-Version: {self.game_version}")
-    
+        
         imported = 0
         page = 1
-    
+        
         while True:
             url = f"{self.commodities_url}?page[number]={page}&page[size]=200&version={self.game_version}&filter[mineable]=true"
             data = self.fetch_json(url)
-        
+            
             if not data:
                 break
-        
+            
             if isinstance(data, dict) and "data" in data:
                 commodities = data["data"]
             elif isinstance(data, list):
                 commodities = data
             else:
                 break
-        
+            
             if not commodities or not isinstance(commodities, list) or len(commodities) == 0:
                 break
-        
+            
             page_imported = 0
-        
+            
             for commodity_data in commodities:
                 if not isinstance(commodity_data, dict):
                     continue
-            
+                
                 name = commodity_data.get("name", "Unknown")
-            
+                
+                # BLACKLIST: Skip ausgeschlossene Items
+                if name in EXCLUDED_COMMODITIES:
+                    logger.debug(f"Skip {name} (in Blacklist)")
+                    continue
+                
                 # Sammle ALLE Fundorte
                 locations_list = []
-            
+                
                 locations = commodity_data.get("locations", [])
                 if locations and isinstance(locations, list):
                     for loc in locations:
@@ -215,7 +335,7 @@ class StarCitizenDataImporter:
                         else:
                             loc_name = str(loc)
                         locations_list.append(loc_name)
-            
+                
                 # Fallback: systems
                 if not locations_list:
                     systems = commodity_data.get("systems", [])
@@ -226,19 +346,19 @@ class StarCitizenDataImporter:
                             else:
                                 sys_name = str(sys)
                             locations_list.append(sys_name)
-            
-                location = ", ".join(locations_list) if locations_list else "Unbekannt"
+                
+                # Sortiere Fundorte nach Typ (System → Planet → Moon → Asteroid)
+                location = self._sort_locations(locations_list)
                 location = str(location) if location else "Unbekannt"
-            
-                # Bestimme Mining-Type - WICHTIG: Prüfe die richtigen Felder!
+                
+                # Bestimme Mining-Type
                 item_type = "SHIP_MINEABLE"  # Standard
-            
-                # Prüfe die "has_" Felder der API!
+                
                 if commodity_data.get("has_fps_mineables") or commodity_data.get("has_ground_vehicle_mineables"):
                     item_type = "HAND_MINEABLE"
                 elif commodity_data.get("has_harvestables"):
                     item_type = "HAND_MINEABLE"
-            
+                
                 try:
                     query = """
                         INSERT INTO crafting_materials (name, location, mining_type)
@@ -252,17 +372,58 @@ class StarCitizenDataImporter:
                 except Exception as e:
                     logger.debug(f"Fehler bei Commodity {name}: {e}")
                     continue
-        
+            
             imported += page_imported
             logger.info(f"   Seite {page}: {page_imported} Commodities")
-        
+            
             if len(commodities) < 200:
                 break
-        
+            
             page += 1
-    
+        
         logger.info(f"✓ {imported} Commodities importiert!")
         return imported
+    
+    def _sort_locations(self, locations_list):
+        """Sortiere Fundorte nach Typ: System → Planet → Moon → Asteroid"""
+        if not locations_list:
+            return "Unbekannt"
+        
+        # Kategorisiere Fundorte
+        systems = []
+        planets = []
+        moons = []
+        asteroids = []
+        others = []
+        
+        for loc in locations_list:
+            if loc in LOCATION_MAPPING:
+                sys, loc_type = LOCATION_MAPPING[loc]
+                
+                if loc_type == "System":
+                    systems.append(loc)
+                elif loc_type == "Planet":
+                    planets.append(loc)
+                elif loc_type == "Moon":
+                    moons.append(loc)
+                elif loc_type == "Asteroid":
+                    asteroids.append(loc)
+                else:
+                    others.append(loc)
+            else:
+                others.append(loc)
+        
+        # Sortiere jede Kategorie alphabetisch
+        systems.sort()
+        planets.sort()
+        moons.sort()
+        asteroids.sort()
+        others.sort()
+        
+        # Kombiniere in Reihenfolge
+        sorted_locations = systems + planets + moons + asteroids + others
+        
+        return ", ".join(sorted_locations)
     
     def import_missions(self):
         """Importiere Missionen mit Pagination - nur veröffentlichte Blueprint-Missionen"""
